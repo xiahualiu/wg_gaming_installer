@@ -46,7 +46,7 @@ Supported distributions:
 Download and execute the script. Answer the questions asked by the script and it will take care of the rest. For most VPS providers, you can just enter through all the questions.
 
 ```bash
-wget -O https://raw.githubusercontent.com/angristan/wireguard-install/master/wireguard-install.sh
+wget https://raw.githubusercontent.com/xiahualiu/wg_gaming_installer/main/wg-gaming-installer.sh 
 chmod +x wireguard-install.sh
 ./wireguard-install.sh
 ```

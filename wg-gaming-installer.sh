@@ -265,7 +265,6 @@ PublicKey = ${SERVER_PUB_KEY}
 PresharedKey = ${CLIENT_PRE_SHARED_KEY}
 Endpoint = ${ENDPOINT}
 AllowedIPs = 0.0.0.0/0,::/0" > "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
-}
 
 	# Enable routing on the server
 	echo "net.ipv4.ip_forward = 1
