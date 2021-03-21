@@ -69,10 +69,7 @@ If the game needs port that is not covered inside, you can modify the postup and
 Supported distributions:
 
 - Ubuntu >= 16.04
-- Debian 10
-- Fedora
-- CentOS
-- Arch Linux
+- Debian/Raspbian 10
 
 ## Usage
 
