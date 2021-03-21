@@ -47,8 +47,7 @@ Download and execute the script. Answer the questions asked by the script and it
 
 ```bash
 wget https://raw.githubusercontent.com/xiahualiu/wg_gaming_installer/main/wg-gaming-installer.sh 
-chmod +x wireguard-install.sh
-./wireguard-install.sh
+bash ./wg-gaming-installer.sh
 ```
 
 It will install WireGuard (kernel module and tools) on the server, configure it, create a systemd service and a client configuration file.
