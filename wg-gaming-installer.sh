@@ -93,8 +93,8 @@ function installQuestions() {
 	if [[ ${SSH_CLIENT##* } -eq 53 || ${SSH_CLIENT##* } -eq 80 || ${SSH_CLIENT##* } -eq 88 || ${SSH_CLIENT##* } -eq 500 || \
 		${SSH_CLIENT##* } -eq 53 || (${SSH_CLIENT##* } -ge 1023 && ${SSH_CLIENT##* } -le 65000 ) ]]; then
 		read -p "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
-		sed -i 's/Port\s+[0-9]+ /Port 65432/' /etc/ssh/sshd_config
-		# Restart ssh no matter what system
+		sed -i 's/Port\s\+[0-9]\+/Port 65432/' /etc/ssh/sshd_config
+		# Restart ssh service
 		systemctl restart ssh.service
 	fi
 
