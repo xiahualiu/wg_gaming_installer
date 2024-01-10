@@ -32,10 +32,10 @@ For a better gaming experience, the server should be close to your living region
 
 ## For Advance User
 
-The reason why it is full cone is due to the DNAT route rules in the iptables:
+The reason why it is full clone is due to the DNAT route rules in the iptables:
 
 ```bash
-# PostUp sricpt example
+# PostUp script example
 # DNAT 53,80,88,500, 1024 to 65000
 
 ### bla bla bla ###
