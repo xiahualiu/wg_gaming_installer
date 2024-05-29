@@ -1,8 +1,22 @@
 # WireGuard installer for Gaming
 
-**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports only ONE client!**
+**Thank you for all the stars!** I was not aware it was so popular before so I decided to actively maintain it from now.
+
+**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports only ONE WireGuard client as of now!**
 
 If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
+
+## Server Public IP problem
+
+This script need to run on a server with a public IP address.
+
+At the beginning of the installation, the script will ask for this public IP address.
+
+Normally the server public IP should be populated automatically, however for some cloud providers like Google Cloud Platform and Oracle Cloud, the auto value is NOT the correct public IP address, but a subnet IP address (usually starts with `10.*.*.*`).
+
+In these cases you need to change the value to what your server's acutal public IP is.
+
+## Port Forwarding
 
 The script **Port Forwards** the local port `53`, `88`, `80`, `500`(4 ports for XBOX LIVE) and `1024-65000` to the corresponding ports on the server side. These ports covered most of the ports used by any games. **Please make sure that there is no other application using these ports on the server, otherwise It will deafen any application that listens to these ports.** I highly suggest running this script on an new empty system. 
 
@@ -68,8 +82,8 @@ If the game needs port that is not covered inside, you can modify the postup and
 
 Supported distributions:
 
-- Ubuntu >= 16.04
-- Debian/Raspbian 10
+- Debian >= 11
+- Ubuntu >= 20.04 (*Preferred*)
 
 ## Usage
 
