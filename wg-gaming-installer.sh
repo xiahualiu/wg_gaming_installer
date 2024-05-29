@@ -381,9 +381,6 @@ function newClient() {
 	echo "PublicKey = ${CLIENT_PUB_KEY}" | sudo tee -a "/etc/wireguard/${SERVER_WG_NIC}.conf"
 	echo "PresharedKey = ${CLIENT_PRE_SHARED_KEY}" | sudo tee -a "/etc/wireguard/${SERVER_WG_NIC}.conf"
 	echo "AllowedIPs = ${CLIENT_WG_IPV4}/32,${CLIENT_WG_IPV6}/128" | sudo tee -a "/etc/wireguard/${SERVER_WG_NIC}.conf"
-
-	sudo wg syncconf "${SERVER_WG_NIC}" <(sudo wg-quick strip "${SERVER_WG_NIC}")
-	echo -e "${GREEN}Your client config file is in ${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf${NC}"
 }
 
 function uninstallWg() {
