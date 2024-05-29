@@ -82,14 +82,11 @@ If the game needs port that is not covered inside, you can modify the postup and
 
 Supported distributions:
 
-- AlmaLinux >= 8
 - Arch Linux
-- CentOS Stream >= 8
 - Debian >= 10
 - Fedora >= 32
-- Oracle Linux
-- Rocky Linux >= 8
-- Ubuntu >= 18.04
+- Oracle Linux >= 8
+- Ubuntu >= 18.04 (*Preferred*)
 
 ## Usage
 

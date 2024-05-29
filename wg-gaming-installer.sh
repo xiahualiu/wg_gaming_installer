@@ -45,17 +45,16 @@ function checkOS() {
 			exit 1
 		fi
 	elif [[ ${OS} == "fedora" ]]; then
-		if [[ ${VERSION_ID} -lt 32 ]]; then
+		if [[ ${VERSION_ID} < 32 ]]; then
 			echo "Your version of Fedora (${VERSION_ID}) is not supported. Please use Fedora 32 or later"
-			exit 1
-		fi
-	elif [[ ${OS} == 'centos' ]] || [[ ${OS} == 'almalinux' ]] || [[ ${OS} == 'rocky' ]]; then
-		if [[ ${VERSION_ID} == 7* ]]; then
-			echo "Your version of CentOS (${VERSION_ID}) is not supported. Please use CentOS 8 or later"
 			exit 1
 		fi
 	elif [[ -e /etc/oracle-release ]]; then
 		source /etc/os-release
+		if [[ $(echo ${VERSION_ID} | sed -n 's/\([0-9]\).*/\1/p') < 8 ]]; then
+			echo "Your version of Oracle Linux (${VERSION_ID}) is not supported. Please use Oracle Linux 8 or later"
+			exit 1
+		fi
 		OS=oracle
 	elif [[ -e /etc/arch-release ]]; then
 		OS=arch
@@ -189,13 +188,6 @@ function installWireGuard() {
 			dnf install -y wireguard-dkms
 		fi
 		dnf install -y wireguard-tools iptables qrencode
-	elif [[ ${OS} == 'centos' ]] || [[ ${OS} == 'almalinux' ]] || [[ ${OS} == 'rocky' ]]; then
-		if [[ ${VERSION_ID} == 8* ]]; then
-			yum install -y epel-release elrepo-release
-			yum install -y kmod-wireguard
-			yum install -y qrencode # not available on release 9
-		fi
-		yum install -y wireguard-tools iptables
 	elif [[ ${OS} == 'oracle' ]]; then
 		dnf install -y oraclelinux-developer-release-el8
 		dnf config-manager --disable -y ol8_developer
