@@ -6,6 +6,16 @@
 
 If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
 
+## Server Public IP problem
+
+This script need to run on a server with a public IP address.
+
+At the beginning of the installation, the script will ask for this public IP address.
+
+Normally the server public IP should be populated automatically, however for some cloud providers like Google Cloud Platform and Oracle Cloud, the auto value is NOT the correct public IP address, but a subnet IP address (usually starts with `10.*.*.*`).
+
+In these cases you need to change the value to what your server's acutal public IP is.
+
 ## Port Forwarding
 
 The script **Port Forwards** the local port `53`, `88`, `80`, `500`(4 ports for XBOX LIVE) and `1024-65000` to the corresponding ports on the server side. These ports covered most of the ports used by any games. **Please make sure that there is no other application using these ports on the server, otherwise It will deafen any application that listens to these ports.** I highly suggest running this script on an new empty system. 

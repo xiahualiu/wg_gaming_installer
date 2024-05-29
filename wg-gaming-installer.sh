@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -eux
+
 RED='\033[0;31m'
 ORANGE='\033[0;33m'
 NC='\033[0m'
@@ -453,14 +455,6 @@ function newClient() {
 	echo "AllowedIPs = ${CLIENT_WG_IPV4}/32,${CLIENT_WG_IPV6}/128" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
 
 	wg syncconf "${SERVER_WG_NIC}" <(wg-quick strip "${SERVER_WG_NIC}")
-
-	# Generate QR code if qrencode is installed
-	if command -v qrencode &>/dev/null; then
-		echo -e "${GREEN}\nHere is your client config file as a QR Code:\n${NC}"
-		qrencode -t ansiutf8 -l L <"${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
-		echo ""
-	fi
-
 	echo -e "${GREEN}Your client config file is in ${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf${NC}"
 }
 
