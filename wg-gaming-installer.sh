@@ -134,6 +134,7 @@ function installQuestions() {
 	done
 
 	# Check if ssh is in range
+	SSH_CLIENT=$(printenv | grep 'SSH_CLIENT')
 	if [[ ${SSH_CLIENT##* } == 53 || ${SSH_CLIENT##* } == 80 || ${SSH_CLIENT##* } == 88 || ${SSH_CLIENT##* } == 500 || \
 		(${SSH_CLIENT##* } > 1023 && ${SSH_CLIENT##* } < 65000 ) ]]; then
 		read -p "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
