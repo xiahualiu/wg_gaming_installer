@@ -28,25 +28,67 @@ function checkVirt() {
 }
 
 function checkOS() {
-	# Check OS version
-	if [[ -e /etc/debian_version ]]; then
-		source /etc/os-release
-		OS="${ID}" # debian or ubuntu
-		if [[ ${ID} == "debian" || ${ID} == "raspbian" ]]; then
-			if [[ ${VERSION_ID} -ne 10 ]]; then
-				echo "Your version of Debian (${VERSION_ID}) is not supported. Please use Debian 10 Buster"
-				exit 1
-			fi
-		elif [[ ${ID} == "ubuntu" ]]; then
-			if [[ ${VERSION_ID%.*} -lt 16 ]]; then
-				echo "Your version of Ubuntu (${VERSION_ID}) is too low."
-				exit 1
-			fi
+	source /etc/os-release
+	OS="${ID}"
+	if [[ ${OS} == "debian" || ${OS} == "raspbian" ]]; then
+		if [[ ${VERSION_ID} -lt 10 ]]; then
+			echo "Your version of Debian (${VERSION_ID}) is not supported. Please use Debian 10 Buster or later"
+			exit 1
 		fi
+		OS=debian # overwrite if raspbian
+	elif [[ ${OS} == "ubuntu" ]]; then
+		RELEASE_YEAR=$(echo "${VERSION_ID}" | cut -d'.' -f1)
+		if [[ ${RELEASE_YEAR} -lt 18 ]]; then
+			echo "Your version of Ubuntu (${VERSION_ID}) is not supported. Please use Ubuntu 18.04 or later"
+			exit 1
+		fi
+	elif [[ ${OS} == "fedora" ]]; then
+		if [[ ${VERSION_ID} -lt 32 ]]; then
+			echo "Your version of Fedora (${VERSION_ID}) is not supported. Please use Fedora 32 or later"
+			exit 1
+		fi
+	elif [[ ${OS} == 'centos' ]] || [[ ${OS} == 'almalinux' ]] || [[ ${OS} == 'rocky' ]]; then
+		if [[ ${VERSION_ID} == 7* ]]; then
+			echo "Your version of CentOS (${VERSION_ID}) is not supported. Please use CentOS 8 or later"
+			exit 1
+		fi
+	elif [[ -e /etc/oracle-release ]]; then
+		source /etc/os-release
+		OS=oracle
+	elif [[ -e /etc/arch-release ]]; then
+		OS=arch
 	else
-		echo "Looks like you aren't running this installer on a Debian, or Ubuntu"
+		echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, AlmaLinux, Oracle or Arch Linux system"
 		exit 1
 	fi
+}
+
+function getHomeDirForClient() {
+	local CLIENT_NAME=$1
+
+	if [ -z "${CLIENT_NAME}" ]; then
+		echo "Error: getHomeDirForClient() requires a client name as argument"
+		exit 1
+	fi
+
+	# Home directory of the user, where the client configuration will be written
+	if [ -e "/home/${CLIENT_NAME}" ]; then
+		# if $1 is a user name
+		HOME_DIR="/home/${CLIENT_NAME}"
+	elif [ "${SUDO_USER}" ]; then
+		# if not, use SUDO_USER
+		if [ "${SUDO_USER}" == "root" ]; then
+			# If running sudo as root
+			HOME_DIR="/root"
+		else
+			HOME_DIR="/home/${SUDO_USER}"
+		fi
+	else
+		# if not SUDO_USER, use /root
+		HOME_DIR="/root"
+	fi
+
+	echo "$HOME_DIR"
 }
 
 function initialCheck() {
@@ -57,7 +99,7 @@ function initialCheck() {
 
 function installQuestions() {
 	echo "Welcome to the WireGuard installer!"
-	echo "The git repository is available at: https://github.com/angristan/wireguard-install"
+	echo "The git repository is available at: https://github.com/xiahualiu/wg_gaming_installer"
 	echo ""
 	echo "I need to ask you a few questions before starting the setup."
 	echo "You can leave the default options and just press enter if you are ok with them."
@@ -90,12 +132,13 @@ function installQuestions() {
 	done
 
 	# Check if ssh is in range
-	if [[ ${SSH_CLIENT##* } -eq 53 || ${SSH_CLIENT##* } -eq 80 || ${SSH_CLIENT##* } -eq 88 || ${SSH_CLIENT##* } -eq 500 || \
-		${SSH_CLIENT##* } -eq 53 || (${SSH_CLIENT##* } -ge 1023 && ${SSH_CLIENT##* } -le 65000 ) ]]; then
+	if [[ ${SSH_CLIENT##* } == 53 || ${SSH_CLIENT##* } == 80 || ${SSH_CLIENT##* } == 88 || ${SSH_CLIENT##* } == 500 || \
+		(${SSH_CLIENT##* } > 1023 && ${SSH_CLIENT##* } < 65000 ) ]]; then
 		read -p "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
 		sed -i 's/Port\s\+[0-9]\+/Port 65432/' /etc/ssh/sshd_config
 		# Restart ssh service
-		systemctl restart ssh.service
+		systemctl restart ssh.service || true
+		systemctl restart sshd.service || true
 	fi
 
 	# Generate random number within private ports range
@@ -104,12 +147,12 @@ function installQuestions() {
 		read -rp "Server's WireGuard port [1-65535]: " -e -i "${RANDOM_PORT}" SERVER_PORT
 	done
 
-	# Adguard DNS by default
+	# Cloudflare DNS by default
 	until [[ ${CLIENT_DNS_1} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-		read -rp "First DNS resolver to use for the clients: " -e -i 94.140.14.14 CLIENT_DNS_1
+		read -rp "First DNS resolver to use for the clients: " -e -i 1.1.1.1 CLIENT_DNS_1
 	done
 	until [[ ${CLIENT_DNS_2} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-		read -rp "Second DNS resolver to use for the clients (optional): " -e -i 94.140.15.15 CLIENT_DNS_2
+		read -rp "Second DNS resolver to use for the clients (optional): " -e -i 1.0.0.1 CLIENT_DNS_2
 		if [[ ${CLIENT_DNS_2} == "" ]]; then
 			CLIENT_DNS_2="${CLIENT_DNS_1}"
 		fi
@@ -126,7 +169,7 @@ function installWireGuard() {
 	installQuestions
 
 	# Install WireGuard tools and module
-	if [[ ${OS} == 'ubuntu' ]]; then
+	if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' && ${VERSION_ID} -gt 10 ]]; then
 		apt-get update
 		apt-get install -y wireguard iptables resolvconf qrencode
 	elif [[ ${OS} == 'debian' ]]; then
@@ -137,134 +180,134 @@ function installWireGuard() {
 		apt update
 		apt-get install -y iptables resolvconf qrencode
 		apt-get install -y -t buster-backports wireguard
+	elif [[ ${OS} == 'fedora' ]]; then
+		if [[ ${VERSION_ID} -lt 32 ]]; then
+			dnf install -y dnf-plugins-core
+			dnf copr enable -y jdoss/wireguard
+			dnf install -y wireguard-dkms
+		fi
+		dnf install -y wireguard-tools iptables qrencode
+	elif [[ ${OS} == 'centos' ]] || [[ ${OS} == 'almalinux' ]] || [[ ${OS} == 'rocky' ]]; then
+		if [[ ${VERSION_ID} == 8* ]]; then
+			yum install -y epel-release elrepo-release
+			yum install -y kmod-wireguard
+			yum install -y qrencode # not available on release 9
+		fi
+		yum install -y wireguard-tools iptables
+	elif [[ ${OS} == 'oracle' ]]; then
+		dnf install -y oraclelinux-developer-release-el8
+		dnf config-manager --disable -y ol8_developer
+		dnf config-manager --enable -y ol8_developer_UEKR6
+		dnf config-manager --save -y --setopt=ol8_developer_UEKR6.includepkgs='wireguard-tools*'
+		dnf install -y wireguard-tools qrencode iptables
+	elif [[ ${OS} == 'arch' ]]; then
+		pacman -S --needed --noconfirm wireguard-tools qrencode
 	fi
 
 	# Make sure the directory exists (this does not seem the be the case on fedora)
 	mkdir /etc/wireguard >/dev/null 2>&1
-
 	chmod 600 -R /etc/wireguard/
 
 	# Server keygen
 	SERVER_PRIV_KEY=$(wg genkey)
 	SERVER_PUB_KEY=$(echo "${SERVER_PRIV_KEY}" | wg pubkey)
-	# Client keygen
-	CLIENT_PRIV_KEY=$(wg genkey)
-	CLIENT_PUB_KEY=$(echo "${CLIENT_PRIV_KEY}" | wg pubkey)
-	CLIENT_PRE_SHARED_KEY=$(wg genpsk)
-
-	# Peer param auto generation
-	ENDPOINT="${SERVER_PUB_IP}:${SERVER_PORT}"
-
-	CLIENT_NAME="local"
-	BASE_IP=$(echo "$SERVER_WG_IPV4" | awk -F '.' '{ print $1"."$2"."$3 }')
-	CLIENT_WG_IPV4="${BASE_IP}.2"
-	BASE_IP=$(echo "$SERVER_WG_IPV6" | awk -F '::' '{ print $1 }')
-	CLIENT_WG_IPV6="${BASE_IP}::2"
-	HOME_DIR="/root"
 
 	# Save WireGuard settings
-	echo "SERVER_PUB_IP=${SERVER_PUB_IP}
-SERVER_PUB_NIC=${SERVER_PUB_NIC}
-SERVER_WG_NIC=${SERVER_WG_NIC}
-SERVER_WG_IPV4=${SERVER_WG_IPV4}
-SERVER_WG_IPV6=${SERVER_WG_IPV6}
-SERVER_PORT=${SERVER_PORT}
-SERVER_PRIV_KEY=${SERVER_PRIV_KEY}
-SERVER_PUB_KEY=${SERVER_PUB_KEY}
-CLIENT_DNS_1=${CLIENT_DNS_1}
-CLIENT_DNS_2=${CLIENT_DNS_2}" > "/etc/wireguard/params"
+	echo "SERVER_PUB_IP=${SERVER_PUB_IP}" > "/etc/wireguard/params"
+	echo "SERVER_PUB_NIC=${SERVER_PUB_NIC}" >> "/etc/wireguard/params"
+	echo "SERVER_WG_NIC=${SERVER_WG_NIC}" >> "/etc/wireguard/params"
+	echo "SERVER_WG_IPV4=${SERVER_WG_IPV4}" >> "/etc/wireguard/params"
+	echo "SERVER_WG_IPV6=${SERVER_WG_IPV6}" >> "/etc/wireguard/params"
+	echo "SERVER_PORT=${SERVER_PORT}" >> "/etc/wireguard/params"
+	echo "SERVER_PRIV_KEY=${SERVER_PRIV_KEY}" >> "/etc/wireguard/params"
+	echo "SERVER_PUB_KEY=${SERVER_PUB_KEY}" >> "/etc/wireguard/params"
+	echo "CLIENT_DNS_1=${CLIENT_DNS_1}" >> "/etc/wireguard/params"
+	echo "CLIENT_DNS_2=${CLIENT_DNS_2}" >> "/etc/wireguard/params"
 
 	# Add server interface
-	echo "[Interface]
-Address = ${SERVER_WG_IPV4}/24,${SERVER_WG_IPV6}/64
-ListenPort = ${SERVER_PORT}
-PrivateKey = ${SERVER_PRIV_KEY}
-PostUp = /etc/wireguard/add-fullcone-nat.sh
-PostDown = /etc/wireguard/rm-fullcone-nat.sh
+	echo "[Interface]" > "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "Address = ${SERVER_WG_IPV4}/24,${SERVER_WG_IPV6}/64" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "ListenPort = ${SERVER_PORT}" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "PrivateKey = ${SERVER_PRIV_KEY}" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "PostUp = /etc/wireguard/add-fullcone-nat.sh" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "PostDown = /etc/wireguard/rm-fullcone-nat.sh" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
 
-[Peer]
-PublicKey = ${CLIENT_PUB_KEY}
-PresharedKey = ${CLIENT_PRE_SHARED_KEY}
-AllowedIPs = ${CLIENT_WG_IPV4}/32,${CLIENT_WG_IPV6}/128" > "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	# Create new client conf, must do this before creating following sh scripts
+	newClient
 
-# add-fullcone-nat.sh and rm-fullcone-nat.sh
-	echo "#!/bin/bash
+	# add-fullcone-nat.sh
+	echo "#!/bin/bash" > "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -I INPUT 1 -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -A FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -A FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "# DNAT from 53,80,88,500, 1024 to 65000" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" >> "/etc/wireguard/add-fullcone-nat.sh"
 
-iptables -A FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT
-iptables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT
-iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
-ip6tables -A FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT
-ip6tables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT
-ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
-# DNAT from 53,80,88,500, 1024 to 65000
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500
-iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000
-
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500
-ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" > "/etc/wireguard/add-fullcone-nat.sh"
-
-echo "#!/bin/bash
-
-iptables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT
-iptables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT
-iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
-ip6tables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT
-ip6tables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT
-ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
-# DNAT from 53,80,88,500, 1024 to 65000
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500
-iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000
-
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500
-ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" > "/etc/wireguard/rm-fullcone-nat.sh"
+  # rm-fullcone-nat.sh
+	echo "#!/bin/bash" > "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -D INPUT -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "# DNAT from 53,80,88,500, 1024 to 65000" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" >> "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" >> "/etc/wireguard/rm-fullcone-nat.sh"
 
 	# Add exec permission
-	chmod u+x /etc/wireguard/add-fullcone-nat.sh
-	chmod u+x /etc/wireguard/rm-fullcone-nat.sh
+	chmod u+x "/etc/wireguard/add-fullcone-nat.sh"
+	chmod u+x "/etc/wireguard/rm-fullcone-nat.sh"
 
-	# Create client file and add the server as a peer
-	echo "[Interface]
-PrivateKey = ${CLIENT_PRIV_KEY}
-Address = ${CLIENT_WG_IPV4}/32,${CLIENT_WG_IPV6}/128
-DNS = ${CLIENT_DNS_1},${CLIENT_DNS_2}
+	# Enable routing on the server
+	echo "net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1" >/etc/sysctl.d/wg.conf
+	sysctl --system
 
-[Peer]
-PublicKey = ${SERVER_PUB_KEY}
-PresharedKey = ${CLIENT_PRE_SHARED_KEY}
-Endpoint = ${ENDPOINT}
-AllowedIPs = 0.0.0.0/0,::/0" > "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	systemctl start "wg-quick@${SERVER_WG_NIC}"
+	systemctl enable "wg-quick@${SERVER_WG_NIC}"
 
 	# Enable routing on the server
 	echo "net.ipv4.ip_forward = 1
@@ -291,15 +334,168 @@ net.ipv6.conf.all.forwarding = 1" >/etc/sysctl.d/wg.conf
 	fi
 }
 
+function getHomeDirForClient() {
+	local CLIENT_NAME=$1
+
+	if [ -z "${CLIENT_NAME}" ]; then
+		echo "Error: getHomeDirForClient() requires a client name as argument"
+		exit 1
+	fi
+
+	# Home directory of the user, where the client configuration will be written
+	if [ -e "/home/${CLIENT_NAME}" ]; then
+		# if $1 is a user name
+		HOME_DIR="/home/${CLIENT_NAME}"
+	elif [ "${SUDO_USER}" ]; then
+		# if not, use SUDO_USER
+		if [ "${SUDO_USER}" == "root" ]; then
+			# If running sudo as root
+			HOME_DIR="/root"
+		else
+			HOME_DIR="/home/${SUDO_USER}"
+		fi
+	else
+		# if not SUDO_USER, use /root
+		HOME_DIR="/root"
+	fi
+
+	echo "$HOME_DIR"
+}
+
+function newClient() {
+	# If SERVER_PUB_IP is IPv6, add brackets if missing
+	if [[ ${SERVER_PUB_IP} =~ .*:.* ]]; then
+		if [[ ${SERVER_PUB_IP} != *"["* ]] || [[ ${SERVER_PUB_IP} != *"]"* ]]; then
+			SERVER_PUB_IP="[${SERVER_PUB_IP}]"
+		fi
+	fi
+	ENDPOINT="${SERVER_PUB_IP}:${SERVER_PORT}"
+
+	echo ""
+	echo "Client configuration"
+	echo ""
+	echo "The client name must consist of alphanumeric character(s). It may also include underscores or dashes and can't exceed 15 chars."
+
+	until [[ ${CLIENT_NAME} =~ ^[a-zA-Z0-9_-]+$ && ${CLIENT_EXISTS} == '0' && ${#CLIENT_NAME} -lt 16 ]]; do
+		read -rp "Client name: " -e CLIENT_NAME
+		CLIENT_EXISTS=$(grep -c -E "^### Client ${CLIENT_NAME}\$" "/etc/wireguard/${SERVER_WG_NIC}.conf")
+
+		if [[ ${CLIENT_EXISTS} != 0 ]]; then
+			echo ""
+			echo -e "${ORANGE}A client with the specified name was already created, please choose another name.${NC}"
+			echo ""
+		fi
+	done
+
+	for DOT_IP in {2..254}; do
+		DOT_EXISTS=$(grep -c "${SERVER_WG_IPV4::-1}${DOT_IP}" "/etc/wireguard/${SERVER_WG_NIC}.conf")
+		if [[ ${DOT_EXISTS} == '0' ]]; then
+			break
+		fi
+	done
+
+	if [[ ${DOT_EXISTS} == '1' ]]; then
+		echo ""
+		echo "The subnet configured supports only 253 clients."
+		exit 1
+	fi
+
+	BASE_IP=$(echo "$SERVER_WG_IPV4" | awk -F '.' '{ print $1"."$2"."$3 }')
+	until [[ ${IPV4_EXISTS} == '0' ]]; do
+		read -rp "Client WireGuard IPv4: ${BASE_IP}." -e -i "${DOT_IP}" DOT_IP
+		CLIENT_WG_IPV4="${BASE_IP}.${DOT_IP}"
+		IPV4_EXISTS=$(grep -c "$CLIENT_WG_IPV4/32" "/etc/wireguard/${SERVER_WG_NIC}.conf")
+
+		if [[ ${IPV4_EXISTS} != 0 ]]; then
+			echo ""
+			echo -e "${ORANGE}A client with the specified IPv4 was already created, please choose another IPv4.${NC}"
+			echo ""
+		fi
+	done
+
+	BASE_IP=$(echo "$SERVER_WG_IPV6" | awk -F '::' '{ print $1 }')
+	until [[ ${IPV6_EXISTS} == '0' ]]; do
+		read -rp "Client WireGuard IPv6: ${BASE_IP}::" -e -i "${DOT_IP}" DOT_IP
+		CLIENT_WG_IPV6="${BASE_IP}::${DOT_IP}"
+		IPV6_EXISTS=$(grep -c "${CLIENT_WG_IPV6}/128" "/etc/wireguard/${SERVER_WG_NIC}.conf")
+
+		if [[ ${IPV6_EXISTS} != 0 ]]; then
+			echo ""
+			echo -e "${ORANGE}A client with the specified IPv6 was already created, please choose another IPv6.${NC}"
+			echo ""
+		fi
+	done
+
+	# Generate key pair for the client
+	CLIENT_PRIV_KEY=$(wg genkey)
+	CLIENT_PUB_KEY=$(echo "${CLIENT_PRIV_KEY}" | wg pubkey)
+	CLIENT_PRE_SHARED_KEY=$(wg genpsk)
+
+	HOME_DIR=$(getHomeDirForClient "${CLIENT_NAME}")
+
+	# Create client file and add the server as a peer
+	echo "[Interface]" > "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo "PrivateKey = ${CLIENT_PRIV_KEY}" >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo "Address = ${CLIENT_WG_IPV4}/32,${CLIENT_WG_IPV6}/128" >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo "DNS = ${CLIENT_DNS_1},${CLIENT_DNS_2}" >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo "" >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo "[Peer]" >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo "PublicKey = ${SERVER_PUB_KEY}" >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo "PresharedKey = ${CLIENT_PRE_SHARED_KEY}" >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo "Endpoint = ${ENDPOINT}" >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	echo 'AllowedIPs = 0.0.0.0/0,::/0' >> "${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+
+	# Add the client as a peer to the server
+	echo "" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "[Peer]" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "PublicKey = ${CLIENT_PUB_KEY}" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "PresharedKey = ${CLIENT_PRE_SHARED_KEY}" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+	echo "AllowedIPs = ${CLIENT_WG_IPV4}/32,${CLIENT_WG_IPV6}/128" >> "/etc/wireguard/${SERVER_WG_NIC}.conf"
+
+	wg syncconf "${SERVER_WG_NIC}" <(wg-quick strip "${SERVER_WG_NIC}")
+
+	# Generate QR code if qrencode is installed
+	if command -v qrencode &>/dev/null; then
+		echo -e "${GREEN}\nHere is your client config file as a QR Code:\n${NC}"
+		qrencode -t ansiutf8 -l L <"${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+		echo ""
+	fi
+
+	echo -e "${GREEN}Your client config file is in ${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf${NC}"
+}
+
 function uninstallWg() {
 	echo ""
-	read -rp "Do you really want to remove WireGuard? [y/n]: " -e -i n REMOVE
+	echo -e "\n${RED}WARNING: This will uninstall WireGuard and remove all the configuration files!${NC}"
+	echo -e "${ORANGE}Please backup the /etc/wireguard directory if you want to keep your configuration files.\n${NC}"
+	read -rp "Do you really want to remove WireGuard? [y/n]: " -e REMOVE
+	REMOVE=${REMOVE:-n}
 	if [[ $REMOVE == 'y' ]]; then
+		checkOS
 
 		systemctl stop "wg-quick@${SERVER_WG_NIC}"
 		systemctl disable "wg-quick@${SERVER_WG_NIC}"
 
-		apt-get autoremove --purge -y wireguard qrencode
+		if [[ ${OS} == 'ubuntu' ]]; then
+			apt-get remove -y wireguard wireguard-tools qrencode
+		elif [[ ${OS} == 'debian' ]]; then
+			apt-get remove -y wireguard wireguard-tools qrencode
+		elif [[ ${OS} == 'fedora' ]]; then
+			dnf remove -y --noautoremove wireguard-tools qrencode
+			if [[ ${VERSION_ID} -lt 32 ]]; then
+				dnf remove -y --noautoremove wireguard-dkms
+				dnf copr disable -y jdoss/wireguard
+			fi
+		elif [[ ${OS} == 'centos' ]] || [[ ${OS} == 'almalinux' ]] || [[ ${OS} == 'rocky' ]]; then
+			yum remove -y --noautoremove wireguard-tools
+			if [[ ${VERSION_ID} == 8* ]]; then
+				yum remove --noautoremove kmod-wireguard qrencode
+			fi
+		elif [[ ${OS} == 'oracle' ]]; then
+			yum remove --noautoremove wireguard-tools qrencode
+		elif [[ ${OS} == 'arch' ]]; then
+			pacman -Rs --noconfirm wireguard-tools qrencode
+		fi
 
 		rm -rf /etc/wireguard
 		rm -f /etc/sysctl.d/wg.conf

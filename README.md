@@ -1,8 +1,12 @@
 # WireGuard installer for Gaming
 
-**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports only ONE client!**
+**Thank you for all the stars!** I was not aware it was so popular before so I decided to actively maintain it from now.
+
+**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports only ONE WireGuard client as of now!**
 
 If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
+
+## Port Forwarding
 
 The script **Port Forwards** the local port `53`, `88`, `80`, `500`(4 ports for XBOX LIVE) and `1024-65000` to the corresponding ports on the server side. These ports covered most of the ports used by any games. **Please make sure that there is no other application using these ports on the server, otherwise It will deafen any application that listens to these ports.** I highly suggest running this script on an new empty system. 
 
@@ -68,8 +72,14 @@ If the game needs port that is not covered inside, you can modify the postup and
 
 Supported distributions:
 
-- Ubuntu >= 16.04
-- Debian/Raspbian 10
+- AlmaLinux >= 8
+- Arch Linux
+- CentOS Stream >= 8
+- Debian >= 10
+- Fedora >= 32
+- Oracle Linux
+- Rocky Linux >= 8
+- Ubuntu >= 18.04
 
 ## Usage
 
