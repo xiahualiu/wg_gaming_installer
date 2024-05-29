@@ -109,6 +109,7 @@ function installQuestions() {
 
 	# Generate random number within private ports range
 	RANDOM_PORT=$(shuf -i65001-65535 -n1)
+	SERVER_PORT=''
 	until [[ ${SERVER_PORT} =~ ^[0-9]+$ && "${SERVER_PORT}" -ge 1 && "${SERVER_PORT}" -le 65535 && ${SERVER_PORT} -ne 65432 ]]; do
 		read -rp "Server's WireGuard port [1-65535]: " -e -i "${RANDOM_PORT}" SERVER_PORT
 	done
