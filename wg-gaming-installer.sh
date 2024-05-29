@@ -37,6 +37,7 @@ function checkOS() {
 			echo "Your version of Ubuntu (${VERSION_ID}) is not supported. Please use Ubuntu 20.04 or later"
 			exit 1
 		fi
+	fi
 }
 
 function initialCheck() {
