@@ -26,25 +26,25 @@ function checkOS() {
 	source /etc/os-release
 	OS="${ID}"
 	if [[ ${OS} == "debian" || ${OS} == "raspbian" ]]; then
-		if [[ ${VERSION_ID} -lt 10 ]]; then
+		if (( ${VERSION_ID} < 10 )); then
 			echo "Your version of Debian (${VERSION_ID}) is not supported. Please use Debian 10 Buster or later"
 			exit 1
 		fi
 		OS=debian # overwrite if raspbian
 	elif [[ ${OS} == "ubuntu" ]]; then
 		RELEASE_YEAR=$(echo "${VERSION_ID}" | cut -d'.' -f1)
-		if [[ ${RELEASE_YEAR} -lt 18 ]]; then
+		if (( ${RELEASE_YEAR} < 18 )); then
 			echo "Your version of Ubuntu (${VERSION_ID}) is not supported. Please use Ubuntu 18.04 or later"
 			exit 1
 		fi
 	elif [[ ${OS} == "fedora" ]]; then
-		if [[ ${VERSION_ID} < 32 ]]; then
+		if (( ${VERSION_ID} < 32 )); then
 			echo "Your version of Fedora (${VERSION_ID}) is not supported. Please use Fedora 32 or later"
 			exit 1
 		fi
 	elif [[ -e /etc/oracle-release ]]; then
 		source /etc/os-release
-		if [[ $(echo ${VERSION_ID} | sed -n 's/\([0-9]\).*/\1/p') < 8 ]]; then
+		if (( $(echo ${VERSION_ID} | sed -n 's/\([0-9]\).*/\1/p') < 8 )); then
 			echo "Your version of Oracle Linux (${VERSION_ID}) is not supported. Please use Oracle Linux 8 or later"
 			exit 1
 		fi
@@ -98,9 +98,8 @@ function installQuestions() {
 	done
 
 	# Check if ssh is in range
-	SSH_CLIENT=$(printenv | grep 'SSH_CLIENT')
-	if [[ ${SSH_CLIENT##* } == 53 || ${SSH_CLIENT##* } == 80 || ${SSH_CLIENT##* } == 88 || ${SSH_CLIENT##* } == 500 || \
-		(${SSH_CLIENT##* } > 1023 && ${SSH_CLIENT##* } < 65000 ) ]]; then
+	if (( ${SSH_CLIENT##* } == 53 || ${SSH_CLIENT##* } == 80 || ${SSH_CLIENT##* } == 88 || ${SSH_CLIENT##* } == 500 || \
+		(${SSH_CLIENT##* } > 1023 && ${SSH_CLIENT##* } < 65000 ) )); then
 		read -p "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
 		sudo sed -i 's/Port\s\+[0-9]\+/Port 65432/' /etc/ssh/sshd_config
 		# Restart ssh service
