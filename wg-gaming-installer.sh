@@ -238,11 +238,11 @@ function installWireGuard() {
 	# add-fullcone-nat.sh
 	echo "#!/bin/bash" > "/etc/wireguard/add-fullcone-nat.sh"
 	echo "iptables -I INPUT 1 -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -A FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -I FORWARD 1 -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -I FORWARD 1 -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
 	echo "iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >> "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -A FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -I FORWARD 1 -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -I FORWARD 1 -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
 	echo "ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >> "/etc/wireguard/add-fullcone-nat.sh"
 	echo "# DNAT from 53,80,88,500, 1024 to 65000" >> "/etc/wireguard/add-fullcone-nat.sh"
 	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" >> "/etc/wireguard/add-fullcone-nat.sh"
@@ -268,7 +268,7 @@ function installWireGuard() {
 
   # rm-fullcone-nat.sh
 	echo "#!/bin/bash" > "/etc/wireguard/rm-fullcone-nat.sh"
-	echo "iptables -D INPUT -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" >> "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -D INPUT -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" >> "/etc/wireguard/rm-fullcone-nat.sh"
 	echo "iptables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/rm-fullcone-nat.sh"
 	echo "iptables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" >> "/etc/wireguard/rm-fullcone-nat.sh"
 	echo "iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >> "/etc/wireguard/rm-fullcone-nat.sh"
