@@ -82,11 +82,8 @@ If the game needs port that is not covered inside, you can modify the postup and
 
 Supported distributions:
 
-- Arch Linux
-- Debian >= 10
-- Fedora >= 32
-- Oracle Linux >= 8
-- Ubuntu >= 18.04 (*Preferred*)
+- Debian >= 11
+- Ubuntu >= 20.04 (*Preferred*)
 
 ## Usage
 
