@@ -264,16 +264,16 @@ function installWireGuard() {
 	sudo chmod u+x "/etc/wireguard/rm-fullcone-nat.sh"
 
 	# Enable routing on the server
-	sudo echo "net.ipv4.ip_forward = 1
-net.ipv6.conf.all.forwarding = 1" >/etc/sysctl.d/wg.conf
+	echo "net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1" | sudo tee /etc/sysctl.d/wg.conf
 	sudo sysctl --system
 
 	sudo systemctl start "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl enable "wg-quick@${SERVER_WG_NIC}"
 
 	# Enable routing on the server
-	sudo echo "net.ipv4.ip_forward = 1
-net.ipv6.conf.all.forwarding = 1" >/etc/sysctl.d/wg.conf
+	echo "net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1" | sudo tee /etc/sysctl.d/wg.conf
 
 	sudo sysctl --system
 
