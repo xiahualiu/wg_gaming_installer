@@ -44,9 +44,10 @@ It solves the following scenarios:
 
 For a better gaming experience, the server should be close to your living region and has a low ping value. You should ping the provider's looking glass datacenter IP first before purchasing a VPS.
 
-## For Advance User
-
+## Customize the forwarding ports
 The reason why it is full cone is due to the DNAT route rules in the iptables:
+
+After the installation, in `etc/wireguard/add-fullcone-nat.sh` you can find:
 
 ```bash
 # PostUp sricpt example
@@ -76,7 +77,7 @@ ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC}-p tcp --dport 500 -j DNAT --
 ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000
 ```
 
-If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it.
+If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it. Remember you need to modify `rm-fullcone-nat.sh` as well.
  
 ## Requirements
 
