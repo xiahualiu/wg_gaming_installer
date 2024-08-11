@@ -6,6 +6,27 @@
 
 If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
 
+## What it does
+
+![](./imgs/before_wireguard.svg)
+![](./imgs/after_wireguard.svg)
+
+### NAT Improvement
+
+Client connects to it will immediately achieve a **Full Cone** NAT, the optimal network type for gaming and torrenting. (How to check my NAT type in Win10 ? Use this tool [NatTypeTester](https://github.com/HMBSbige/NatTypeTester)).
+
+With this script, you do not need to enable port forwarding on your router, you do not need the DMZ setting. All the magic happens inside Wireguard. Simply speaking: 
+
+>The local ports will be forwarded to the server directly.
+
+It solves the following scenarios:
+
+1. You want to host a Minecraft/Terraria, etc. server online and play with your friend, but you cannot figure out how to enable port forwarding on your router, or your ISP just did not give you a public IP address.
+
+2. You play a P2P game like Monster Hunter: World or Overcooked! but your NAT type prevents you from connecting with other players. 
+
+For a better gaming experience, the server should be close to your living region and has a low ping value. You should ping the provider's looking glass datacenter IP first before purchasing a VPS.
+
 ## Server Public IP problem
 
 This script need to run on a server with a public IP address.
@@ -27,22 +48,6 @@ The script supports both IPv4 and IPv6.
 WireGuard does not fit your environment? Check out [openvpn-install](https://github.com/angristan/openvpn-install).
 
 Most part of this script is based on the angristan's [wireguard-install](https://github.com/angristan/wireguard-install/), because I am a new shell programmer so any improvement pull request is welcomed!
-
-## NAT Improvement
-
-Client connects to it will immediately achieve a **Full Cone** NAT, the optimal network type for gaming and torrenting. (How to check my NAT type in Win10 ? Use this tool [NatTypeTester](https://github.com/HMBSbige/NatTypeTester)).
-
-With this script, you do not need to enable port forwarding on your router, you do not need the DMZ setting. All the magic happens inside Wireguard. Simply speaking: 
-
->The local ports will be forwarded to the server directly.
-
-It solves the following scenarios:
-
-1. You want to host a Minecraft/Terraria, etc. server online and play with your friend, but you cannot figure out how to enable port forwarding on your router, or your ISP just did not give you a public IP address.
-
-2. You play a P2P game like Monster Hunter: World or Overcooked! but your NAT type prevents you from connecting with other players. 
-
-For a better gaming experience, the server should be close to your living region and has a low ping value. You should ping the provider's looking glass datacenter IP first before purchasing a VPS.
 
 ## Customize the forwarding ports
 The reason why it is full cone is due to the DNAT route rules in the iptables:
@@ -77,14 +82,24 @@ ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC}-p tcp --dport 500 -j DNAT --
 ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000
 ```
 
-If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it. Remember you need to modify `rm-fullcone-nat.sh` as well.
+If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it. 
+
+* Run the script and **STOP** the wireguard service.
+* Modify `add-fullcone-nat.sh`, `rm-fullcone-nat.sh` according to your need.
+* Run the script and **RESTART** the wireguard service.
  
 ## Requirements
 
-Supported distributions:
+Main branch supported distributions:
 
 - Debian >= 11
 - Ubuntu >= 20.04 (*Preferred*)
+
+The main branch only works on **KVM** instances. If you are using cloud service from Google, AWS or Oracle, etc. They are based on **KVM** virtualization technology.
+
+Another popular VPS type is **OpenVZ** which usually comes cheaper than **KVM**. If you have this type of machine, unfortunately you cannot run the original WireGuard that comes with the linux kernel module.
+
+However it is still possible to use a userspace WireGuard implementation, for example [wireguard-go](https://github.com/WireGuard/wireguard-go) or [BoringTun](https://github.com/cloudflare/boringtun). Sometimes these userspace implementations are even faster.
 
 ## Usage
 
