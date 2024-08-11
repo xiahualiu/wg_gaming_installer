@@ -8,8 +8,13 @@ If you are looking for a common WireGuard install script that supports multi-cli
 
 ## What it does
 
-![](./imgs/before_wireguard.svg)
-![](./imgs/after_wireguard.svg)
+#### Before using WireGuard
+
+![](./imgs/before_wireguard.png)
+
+#### After using WireGuard
+
+![](./imgs/after_wireguard.png)
 
 ### NAT Improvement
 
