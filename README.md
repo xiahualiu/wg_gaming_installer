@@ -55,6 +55,7 @@ WireGuard does not fit your environment? Check out [openvpn-install](https://git
 Most part of this script is based on the angristan's [wireguard-install](https://github.com/angristan/wireguard-install/), because I am a new shell programmer so any improvement pull request is welcomed!
 
 ## Customize the forwarding ports
+
 The reason why it is full cone is due to the DNAT route rules in the iptables:
 
 After the installation, in `etc/wireguard/add-fullcone-nat.sh` you can find:
@@ -87,7 +88,7 @@ ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC}-p tcp --dport 500 -j DNAT --
 ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000
 ```
 
-If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it. Depending on the Linux distribution, the command could be `nft` instead of `iptables`.
+If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it.
 
 * Run the script and **STOP** the wireguard service.
 * Modify `add-fullcone-nat.sh`, `rm-fullcone-nat.sh` according to your need.
@@ -105,6 +106,14 @@ The main branch only works on **KVM** instances. If you are using cloud service 
 Another popular VPS type is **OpenVZ** which usually comes cheaper than **KVM**. If you have this type of machine, unfortunately you cannot run the original WireGuard that requires extra linux kernel module.
 
 However it is still possible to use a userspace WireGuard implementation, for example [wireguard-go](https://github.com/WireGuard/wireguard-go) or [BoringTun](https://github.com/cloudflare/boringtun). Sometimes these userspace implementations are even faster, according to [tests](https://www.reddit.com/r/WireGuard/comments/14r6uf9/i_did_some_benchmarks_of_linux_wireguard/).
+
+### For OpenVZ instances
+
+* Enable TUN/TAP linux driver on your VM management panel, or contact your provider to enable it.
+* Compile either [wireguard-go](https://github.com/WireGuard/wireguard-go) or [BoringTun](https://github.com/cloudflare/boringtun).
+* Move the compiled binary (either `wireguard-go` or `boringrun-cli`) to `/usr/local/bin`.
+* Comment out the installer script line #10-#14, removing the OpenVZ check.
+* Run the installer script now.
 
 ## Usage
 
