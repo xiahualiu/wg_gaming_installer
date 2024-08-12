@@ -34,6 +34,7 @@ function checkOS() {
 		fi
 		OS=debian # overwrite if raspbian
 		return 0
+	fi
 	# Ubuntu
 	if [[ ${OS} == "ubuntu" ]]; then
 		RELEASE_YEAR=$(echo "${VERSION_ID}" | cut -d'.' -f1)
