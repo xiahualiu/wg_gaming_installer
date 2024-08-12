@@ -138,11 +138,11 @@ function installWireGuard() {
 		sudo apt-get update
 		sudo apt-get install -y wireguard iptables resolvconf qrencode
 	elif [[ ${OS} == 'oracle' ]]; then
-		dnf install -y oraclelinux-developer-release-el8
-		dnf config-manager --disable -y ol8_developer
-		dnf config-manager --enable -y ol8_developer_UEKR6
-		dnf config-manager --save -y --setopt=ol8_developer_UEKR6.includepkgs='wireguard-tools*'
-		dnf install -y wireguard-tools qrencode iptables
+		sudo dnf install -y oraclelinux-developer-release-el8
+		sudo dnf config-manager --disable -y ol8_developer
+		sudo dnf config-manager --enable -y ol8_developer_UEKR6
+		sudo dnf config-manager --save -y --setopt=ol8_developer_UEKR6.includepkgs='wireguard-tools*'
+		sudo dnf install -y wireguard-tools qrencode iptables
 	fi
 
 	# Make sure the directory exists (this does not seem the be the case on fedora)
