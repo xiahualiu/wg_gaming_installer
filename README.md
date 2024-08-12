@@ -87,7 +87,7 @@ ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC}-p tcp --dport 500 -j DNAT --
 ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000
 ```
 
-If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it. 
+If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it. Depending on the Linux distribution, the command could be `nft` instead of `iptables`.
 
 * Run the script and **STOP** the wireguard service.
 * Modify `add-fullcone-nat.sh`, `rm-fullcone-nat.sh` according to your need.
@@ -102,9 +102,9 @@ Main branch supported distributions:
 
 The main branch only works on **KVM** instances. If you are using cloud service from Google, AWS or Oracle, etc. They are based on **KVM** virtualization technology.
 
-Another popular VPS type is **OpenVZ** which usually comes cheaper than **KVM**. If you have this type of machine, unfortunately you cannot run the original WireGuard that comes with the linux kernel module.
+Another popular VPS type is **OpenVZ** which usually comes cheaper than **KVM**. If you have this type of machine, unfortunately you cannot run the original WireGuard that requires extra linux kernel module.
 
-However it is still possible to use a userspace WireGuard implementation, for example [wireguard-go](https://github.com/WireGuard/wireguard-go) or [BoringTun](https://github.com/cloudflare/boringtun). Sometimes these userspace implementations are even faster.
+However it is still possible to use a userspace WireGuard implementation, for example [wireguard-go](https://github.com/WireGuard/wireguard-go) or [BoringTun](https://github.com/cloudflare/boringtun). Sometimes these userspace implementations are even faster, according to [tests](https://www.reddit.com/r/WireGuard/comments/14r6uf9/i_did_some_benchmarks_of_linux_wireguard/).
 
 ## Usage
 

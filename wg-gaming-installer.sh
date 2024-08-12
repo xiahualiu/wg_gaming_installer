@@ -8,7 +8,8 @@ NC='\033[0m'
 
 function checkVirt() {
 	if [ "$(systemd-detect-virt)" == "openvz" ]; then
-		echo "OpenVZ is not supported"
+		echo "OpenVZ is not supported!!!"
+		echo "For more information of using userspace WireGuard, check README.md"
 		exit 1
 	fi
 
@@ -25,19 +26,30 @@ function checkVirt() {
 function checkOS() {
 	source /etc/os-release
 	OS="${ID}"
+	# Debian & Raspbian
 	if [[ ${OS} == "debian" || ${OS} == "raspbian" ]]; then
 		if (( ${VERSION_ID} < 11 )); then
 			echo "Your version of Debian (${VERSION_ID}) is not supported. Please use Debian 11 Bullseye or later"
 			exit 1
 		fi
 		OS=debian # overwrite if raspbian
-	elif [[ ${OS} == "ubuntu" ]]; then
+		return 0
+	# Ubuntu
+	if [[ ${OS} == "ubuntu" ]]; then
 		RELEASE_YEAR=$(echo "${VERSION_ID}" | cut -d'.' -f1)
 		if (( ${RELEASE_YEAR} < 20 )); then
 			echo "Your version of Ubuntu (${VERSION_ID}) is not supported. Please use Ubuntu 20.04 or later"
 			exit 1
 		fi
+		return 0
 	fi
+	# Oracle Linux
+	if [[ -e "/etc/oracle-release" ]]; then
+		OS=oracle
+		return 0
+	fi
+	echo "This Linux distribution is not supported yet."
+	exit 1
 }
 
 function initialCheck() {
@@ -124,6 +136,12 @@ function installWireGuard() {
 	if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' && ${VERSION_ID} -gt 10 ]]; then
 		sudo apt-get update
 		sudo apt-get install -y wireguard iptables resolvconf qrencode
+	elif [[ ${OS} == 'oracle' ]]; then
+		dnf install -y oraclelinux-developer-release-el8
+		dnf config-manager --disable -y ol8_developer
+		dnf config-manager --enable -y ol8_developer_UEKR6
+		dnf config-manager --save -y --setopt=ol8_developer_UEKR6.includepkgs='wireguard-tools*'
+		dnf install -y wireguard-tools qrencode iptables
 	fi
 
 	# Make sure the directory exists (this does not seem the be the case on fedora)
@@ -157,68 +175,13 @@ function installWireGuard() {
 	# Create new client conf, must do this before creating following sh scripts
 	newClient
 
-	# add-fullcone-nat.sh
-	echo "#!/bin/bash" | sudo tee "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -I INPUT 1 -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -I FORWARD 1 -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -I FORWARD 1 -i ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -I FORWARD 1 -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -I FORWARD 1 -i ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "# DNAT from 53,80,88,500, 1024 to 65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
-
-  # rm-fullcone-nat.sh
-	sudo echo "#!/bin/bash" | sudo tee "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -D INPUT -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "# DNAT from 53,80,88,500, 1024 to 65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-	sudo echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
-
+	# Check if iptables or nftables
+	if [[ -n $(iptables -V | grep 'legacy') ]]; then
+		echoIptableRules
+	elif [[ -n $(iptables -V | grep 'nf_tables') ]]; then
+		echoNftableRules
+	fi
+	
 	# Add exec permission
 	sudo chmod u+x "/etc/wireguard/add-fullcone-nat.sh"
 	sudo chmod u+x "/etc/wireguard/rm-fullcone-nat.sh"
@@ -343,6 +306,107 @@ function newClient() {
 	echo "AllowedIPs = ${CLIENT_WG_IPV4}/32,${CLIENT_WG_IPV6}/128" | sudo tee -a "/etc/wireguard/${SERVER_WG_NIC}.conf"
 }
 
+function echoIptableRules() {
+	# add-fullcone-nat.sh
+	echo "#!/bin/bash" | sudo tee "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -I INPUT 1 -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -I FORWARD 1 -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -I FORWARD 1 -i ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -I FORWARD 1 -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -I FORWARD 1 -i ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "# DNAT from 53,80,88,500, 1024 to 65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	# rm-fullcone-nat.sh
+	echo "#!/bin/bash" | sudo tee "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -D INPUT -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "# DNAT from 53,80,88,500, 1024 to 65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "ip6tables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+}
+
+function echoNftableRules() {
+	# add-fullcone-nat.sh
+	echo "#!/bin/bash" | sudo tee "/etc/wireguard/add-fullcone-nat.sh"
+	# Save rules
+	echo "nft list ruleset > /etc/nftables.conf" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft insert rule ip filter INPUT iifname ${SERVER_PUB_NIC} udp dport ${SERVER_PORT} counter accept" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft insert rule ip filter FORWARD iifname ${SERVER_PUB_NIC} oifname ${SERVER_WG_NIC} counter accept" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft insert rule ip filter FORWARD iifname ${SERVER_WG_NIC} counter accept" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat POSTROUTING oifname ${SERVER_PUB_NIC} counter masquerade" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft insert rule ip6 filter FORWARD iifname ${SERVER_PUB_NIC} oifname ${SERVER_WG_NIC} counter accept" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft insert rule ip6 filter FORWARD iifname ${SERVER_WG_NIC} counter accept" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat POSTROUTING oifname ${SERVER_PUB_NIC} counter masquerade" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "# DNAT from 53,80,88,500, 1024 to 65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 53 counter dnat to ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 80 counter dnat to ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 88 counter dnat to ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 500 counter dnat to ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 1024-65000 counter dnat to ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 53 counter dnat to ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 80 counter dnat to ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 88 counter dnat to ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 500 counter dnat to ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 1024-65000 counter dnat to ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 53 counter dnat to ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 80 counter dnat to ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 88 counter dnat to ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 500 counter dnat to ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} udp dport 1024-65000 counter dnat to ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 53 counter dnat to ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 80 counter dnat to ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 88 counter dnat to ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 500 counter dnat to ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	echo "nft add rule ip6 nat PREROUTING iifname ${SERVER_PUB_NIC} tcp dport 1024-65000 counter dnat to ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/add-fullcone-nat.sh"
+	# rm-fullcone-nat.sh
+	echo "#!/bin/bash" | sudo tee "/etc/wireguard/rm-fullcone-nat.sh"
+	echo "nft -f /etc/nftables.conf" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+}
+
 function uninstallWg() {
 	echo ""
 	echo -e "\n${RED}WARNING: This will uninstall WireGuard and remove all the configuration files!${NC}"
@@ -355,10 +419,10 @@ function uninstallWg() {
 		sudo systemctl stop "wg-quick@${SERVER_WG_NIC}"
 		sudo systemctl disable "wg-quick@${SERVER_WG_NIC}"
 
-		if [[ ${OS} == 'ubuntu' ]]; then
-			sudo apt-get remove -y wireguard wireguard-tools qrencode
-		elif [[ ${OS} == 'debian' ]]; then
-			sudo apt-get remove -y wireguard wireguard-tools qrencode
+		if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' ]]; then
+			sudo apt-get autoremove -y wireguard wireguard-tools qrencode
+		elif [[ ${OS} == 'oracle' ]]; then
+			sudo dnf autoremove wireguard-tools qrencode
 		fi
 
 		sudo rm -rf /etc/wireguard
