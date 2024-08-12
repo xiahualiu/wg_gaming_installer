@@ -153,7 +153,7 @@ function installWireGuard() {
 
 	# Make sure the directory exists (this does not seem the be the case on fedora)
 	sudo mkdir -p /etc/wireguard
-	sudo chmod 600 -R /etc/wireguard/
+	sudo chmod 700 -R /etc/wireguard/
 
 	# Server keygen
 	SERVER_PRIV_KEY=$(wg genkey)
