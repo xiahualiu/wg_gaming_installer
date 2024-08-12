@@ -8,7 +8,8 @@ NC='\033[0m'
 
 function checkVirt() {
 	if [ "$(systemd-detect-virt)" == "openvz" ]; then
-		echo "OpenVZ is not supported"
+		echo "OpenVZ is not supported!"
+		echo "For more information of using userspace WireGuard, check README.md"
 		exit 1
 	fi
 
@@ -31,13 +32,18 @@ function checkOS() {
 			exit 1
 		fi
 		OS=debian # overwrite if raspbian
-	elif [[ ${OS} == "ubuntu" ]]; then
+		return 0
+	fi
+	if [[ ${OS} == "ubuntu" ]]; then
 		RELEASE_YEAR=$(echo "${VERSION_ID}" | cut -d'.' -f1)
 		if (( ${RELEASE_YEAR} < 20 )); then
 			echo "Your version of Ubuntu (${VERSION_ID}) is not supported. Please use Ubuntu 20.04 or later"
 			exit 1
 		fi
+		return 0
 	fi
+	echo "Your Linux distribution (${OS}) is not supported. Please use Ubuntu 20.04 or later"
+	exit 1
 }
 
 function initialCheck() {
@@ -128,7 +134,7 @@ function installWireGuard() {
 
 	# Make sure the directory exists (this does not seem the be the case on fedora)
 	sudo mkdir -p /etc/wireguard
-	sudo chmod 600 -R /etc/wireguard/
+	sudo chmod 700 -R /etc/wireguard/
 
 	# Server keygen
 	SERVER_PRIV_KEY=$(wg genkey)
@@ -355,10 +361,8 @@ function uninstallWg() {
 		sudo systemctl stop "wg-quick@${SERVER_WG_NIC}"
 		sudo systemctl disable "wg-quick@${SERVER_WG_NIC}"
 
-		if [[ ${OS} == 'ubuntu' ]]; then
-			sudo apt-get remove -y wireguard wireguard-tools qrencode
-		elif [[ ${OS} == 'debian' ]]; then
-			sudo apt-get remove -y wireguard wireguard-tools qrencode
+		if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' ]]; then
+			sudo apt-get autoremove -y wireguard wireguard-tools qrencode
 		fi
 
 		sudo rm -rf /etc/wireguard
