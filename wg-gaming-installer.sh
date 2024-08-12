@@ -47,9 +47,19 @@ function checkOS() {
 	# Oracle Linux
 	if [[ -e "/etc/oracle-release" ]]; then
 		OS=oracle
+		echo "Oracle Linux is not supported!"
+		exit 1
+	fi
+	# Fedora
+	if [[ ${OS} == 'fedora' ]]; then
+		if [[ ${VERSION_ID} < 32 ]]; then
+			echo "Fedora version is too low (< 32)!"
+			exit 1
+		fi
 		return 0
 	fi
-	echo "This Linux distribution is not supported yet."
+
+	echo "This Linux distribution ${OS} is not supported yet."
 	exit 1
 }
 
@@ -137,12 +147,8 @@ function installWireGuard() {
 	if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' && ${VERSION_ID} -gt 10 ]]; then
 		sudo apt-get update
 		sudo apt-get install -y wireguard iptables resolvconf qrencode
-	elif [[ ${OS} == 'oracle' ]]; then
-		sudo dnf install -y oraclelinux-developer-release-el8
-		sudo dnf config-manager --disable -y ol8_developer
-		sudo dnf config-manager --enable -y ol8_developer_UEKR6
-		sudo dnf config-manager --save -y --setopt=ol8_developer_UEKR6.includepkgs='wireguard-tools*'
-		sudo dnf install -y wireguard-tools qrencode iptables
+	elif [[ ${OS} == 'fedora' ]]; then
+		sudo dnf install -y wireguard-tools iptables qrencode
 	fi
 
 	# Make sure the directory exists (this does not seem the be the case on fedora)
@@ -422,8 +428,8 @@ function uninstallWg() {
 
 		if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' ]]; then
 			sudo apt-get autoremove -y wireguard wireguard-tools qrencode
-		elif [[ ${OS} == 'oracle' ]]; then
-			sudo dnf autoremove wireguard-tools qrencode
+		elif [[ ${OS} == 'fedora' ]]; then
+			sudo dnf autoremove -y wireguard-tools qrencode
 		fi
 
 		sudo rm -rf /etc/wireguard
