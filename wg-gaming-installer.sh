@@ -52,8 +52,8 @@ function initialCheck() {
 }
 
 function installQuestions() {
-	echo "Welcome to the WireGuard installer!"
-	echo "The git repository is available at: https://github.com/xiahualiu/wg_gaming_installer"
+	echo "Welcome to the WireGuard installer For PI Networl!"
+	echo "The git repository is available at: https://github.com/coleganet"
 	echo ""
 	echo "I need to ask you a few questions before starting the setup."
 	echo "You can leave the default options and just press enter if you are ok with them."
@@ -208,9 +208,16 @@ function installWireGuard() {
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+        sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 443 -j DNAT --to-destination ${CLIENT_WG_IPV4}:443" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+        sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 31400 -j DNAT --to-destination ${CLIENT_WG_IPV4}:31400" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 31401 -j DNAT --to-destination ${CLIENT_WG_IPV4}:31401" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+        sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 31402 -j DNAT --to-destination ${CLIENT_WG_IPV4}:31402" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 31403 -j DNAT --to-destination ${CLIENT_WG_IPV4}:31403" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+        sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 31404 -j DNAT --to-destination ${CLIENT_WG_IPV4}:31404" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
+        sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 443 -j DNAT --to-destination ${CLIENT_WG_IPV4}:443" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
 	sudo echo "iptables -t nat -D PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000" | sudo tee -a "/etc/wireguard/rm-fullcone-nat.sh"
