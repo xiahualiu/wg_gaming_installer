@@ -1,8 +1,8 @@
-# WireGuard installer for Gaming
+# WireGuard installer for Gaming and PI Nodos or Crypto servers
 
 **Thank you for all the stars!** I was not aware it was so popular before so I decided to actively maintain it from now.
 
-**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports only ONE WireGuard client as of now!**
+**This project is a bash script that aims to setup a (https://github.com/Coleganet/wireguard_plu)) VPN that is specified for PERSONAL gaming or torrenting use. It supports only ONE WireGuard client as of now!**
 
 If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
 
