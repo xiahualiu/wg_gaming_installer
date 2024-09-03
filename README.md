@@ -122,7 +122,7 @@ However it is still possible to use a userspace WireGuard implementation, for ex
 Download and execute the script. You **DO NOT** need to run the script with `root`, but it requires the user to be in the `sudo` group. Answer the questions asked by the script and it will take care of the rest. For most VPS providers, you can just enter through all the questions.
 
 ```bash
-wget https://raw.githubusercontent.com/xiahualiu/wg_gaming_installer/main/wg-gaming-installer.sh 
+wget https://raw.githubusercontent.com/Coleganet/wireguard_plus/main/wg-gaming-installer.sh 
 bash ./wg-gaming-installer.sh
 ```
 
