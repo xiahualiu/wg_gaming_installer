@@ -6,7 +6,7 @@ WireGuard uses ChaCha20Poly1305, which is extremely fast in software on virtuall
 
 **Thank you for all the stars!** I was not aware it was so popular before so I decided to actively maintain it from now.
 
-**This project is a bash script that aims to setup a (https://github.com/Coleganet/wireguard_plus)) VPN that is specified for PERSONAL PI Nodos, gaming or torrenting use. It supports only ONE WireGuard client as of now!**
+**This project is a bash script that aims to setup a (https://github.com/Coleganet/wireguard_PI)) VPN that is specified for PERSONAL PI Nodos, gaming or torrenting use. It supports only ONE WireGuard client as of now!**
 
 If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
 
@@ -124,7 +124,7 @@ However it is still possible to use a userspace WireGuard implementation, for ex
 Download and execute the script. You **DO NOT** need to run the script with `root`, but it requires the user to be in the `sudo` group. Answer the questions asked by the script and it will take care of the rest. For most VPS providers, you can just enter through all the questions.
 
 ```bash
-wget https://raw.githubusercontent.com/Coleganet/wireguard_plus/main/wg-gaming-installer.sh 
+wget https://raw.githubusercontent.com/Coleganet/wireguard_PI/main/wg-gaming-installer.sh 
 bash ./wg-gaming-installer.sh
 ```
 
