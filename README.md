@@ -1,11 +1,21 @@
 # WireGuard installer for Gaming and PI Nodos or Crypto servers
-Hardware Crypto
-WireGuard uses ChaCha20Poly1305, which is extremely fast in software on virtually all general purpose CPUs. As of writing, there is not an overwhelming amount of dedicated hardware support for it, though this is changing. Practically speaking, this is not a problem, as vector instructions on CPUs wind up being in the same ballpark (and sometimes even faster) than AES-NI instructions.
+**Hardware Crypto
+WireGuard uses ChaCha20Poly1305, which is extremely fast in software on virtually all general purpose CPUs. As of writing, there is not an overwhelming amount of dedicated hardware support for it, though this is changing. Practically speaking, this is not a problem, as vector instructions on CPUs wind up being in the same ballpark (and sometimes even faster) than AES-NI instructions.**
  
 ![](./imgs/pinet.png)
 
 **While using the Pi-node applications on your PCs, you will need to open a range of TCP ports from 31400-31409, usually these ports are blocked on a local ISP network. Only a reliable VPN can help you in this case.**
 **You will get open all the ports you need for your PI NODE**
+**PI the bonus earning criteria?
+There are 3 criteria.
+    4.1 Number of CPU cores of your processor.
+    4.2 Pi Node app uptime (power or internet disconnection affects this time).
+    4.3 Having ports 31400-31409 open.**
+**You earn bonus according to these 3 criteria and you can earn more pi accordingly. Having a very high RAM or internet speed does not add much extra bonus. Enough RAM and a stable internet line that is not too slow is sufficient.**
+
+**Is it important to open a port?**
+**There are 2 types of nodes; Normal Node and Super Node. To become a Super Node, you need to open port. Also, opening a port is one of the bonus criteria. You get more bonuses when the port is open.**
+
 
 **This project is a bash script that aims to setup a (https://github.com/Coleganet/wireguard_PI)) VPN that is specified for PERSONAL PI Nodos, gaming or torrenting use. It supports only ONE WireGuard client as of now!**
 
