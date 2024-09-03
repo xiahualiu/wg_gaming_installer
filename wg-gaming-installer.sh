@@ -126,10 +126,32 @@ function installWireGuard() {
 	# Run setup questions first
 	installQuestions
 
-	# Install WireGuard tools and module
+	# Install WireGuard tools and module plus Server Security Extras
 	if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' && ${VERSION_ID} -gt 10 ]]; then
 		sudo apt-get update
 		sudo apt-get install -y wireguard iptables resolvconf qrencode
+                sudo apt-get install -y lynis clamav clamav-daemon rkhunter
+		sudo systemctl stop clamav-freshclam
+                echo "You will be able to update de Database of Frescam for check for any infection."
+	        read -n1 -r -p "Press any key to continue..."
+	        sudo freshclam
+	        sudo systemctl start clamav-freshclam
+                sudo systemctl enable clamav-freshclam
+		sudo clamscan -r /
+                echo "Please check is not any risk or any infection."
+	        read -n1 -r -p "Press any key to continue for install Rkhunter..."
+		sudo apt-get install rkhunter
+                sudo rkhunter --propupd
+		sudo rkhunter --checkall
+                sudo cat /var/log/rkhunter.log | grep -i warning
+		echo "You will be able to update de Database of Rkhunter for check for any infection."
+	        read -n1 -r -p "Press any key to continue and install Chkrootkit..."
+	        sudo apt-get install chkrootkit
+	        sudo chkrootkit
+	        sudo cat /var/log/rkhunter.log | grep -i warning
+	        echo "You will be able to update de Database of Chkrootkit for check for any infection."
+	        read -n1 -r -p "Press any key to continue and install with Wireguard..."
+	        
 	fi
 
 	# Make sure the directory exists (this does not seem the be the case on fedora)
