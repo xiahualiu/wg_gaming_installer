@@ -3,8 +3,7 @@ Hardware Crypto
 WireGuard uses ChaCha20Poly1305, which is extremely fast in software on virtually all general purpose CPUs. As of writing, there is not an overwhelming amount of dedicated hardware support for it, though this is changing. Practically speaking, this is not a problem, as vector instructions on CPUs wind up being in the same ballpark (and sometimes even faster) than AES-NI instructions.
  
 ![](./imgs/pinet.png)
-
-**Thank you for all the stars!** I was not aware it was so popular before so I decided to actively maintain it from now.
+**While using the Pi-node applications on your PCs, you will need to open a range of TCP ports from 31400-31409, usually these ports are blocked on a local ISP network. Only a reliable VPN can help you in this case.**
 
 **This project is a bash script that aims to setup a (https://github.com/Coleganet/wireguard_PI)) VPN that is specified for PERSONAL PI Nodos, gaming or torrenting use. It supports only ONE WireGuard client as of now!**
 
