@@ -6,11 +6,13 @@ WireGuard uses ChaCha20Poly1305, which is extremely fast in software on virtuall
 
 **While using the Pi-node applications on your PCs, you will need to open a range of TCP ports from 31400-31409, usually these ports are blocked on a local ISP network. Only a reliable VPN can help you in this case.**
 **You will get open all the ports you need for your PI NODE**
-**PI the bonus earning criteria?
-There are 3 criteria.
-    4.1 Number of CPU cores of your processor.
-    4.2 Pi Node app uptime (power or internet disconnection affects this time).
-    4.3 Having ports 31400-31409 open.**
+**PI the bonus earning criteria?**
+
+***There are 3 criteria.***
+    **1 Number of CPU cores of your processor.
+    2 Pi Node app uptime (power or internet disconnection affects this time).
+    3 Having ports 31400-31409 open.**
+
 **You earn bonus according to these 3 criteria and you can earn more pi accordingly. Having a very high RAM or internet speed does not add much extra bonus. Enough RAM and a stable internet line that is not too slow is sufficient.**
 
 **Is it important to open a port?**
