@@ -1,4 +1,6 @@
 # WireGuard installer for Gaming and PI Nodos or Crypto servers
+Hardware Crypto
+WireGuard uses ChaCha20Poly1305, which is extremely fast in software on virtually all general purpose CPUs. As of writing, there is not an overwhelming amount of dedicated hardware support for it, though this is changing. Practically speaking, this is not a problem, as vector instructions on CPUs wind up being in the same ballpark (and sometimes even faster) than AES-NI instructions.
 
 **Thank you for all the stars!** I was not aware it was so popular before so I decided to actively maintain it from now.
 
