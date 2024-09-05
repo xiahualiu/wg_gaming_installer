@@ -74,13 +74,19 @@ Most part of this script is based on the angristan's [wireguard-install](https:/
 ## Clients
 
   You can download the classic client for Windows, Linux or MAC in 
+  
   Wireguard Client Download Links https://download.wireguard.com/windows-client/
+  
   Wireguard Public Page https://www.wireguard.com/
+  
   Wireguard Github https://github.com/WireGuard
 
   If you need a more advance clients with tunneling your ports I recommend Wiresock 
+  
   Wiresock for Download https://www.wiresock.net/wiresock-vpn-client/download
+  
   Public Page https://www.wiresock.net/
+  
   Wiresock Github https://github.com/wiresock/WireSockUI
 
 
