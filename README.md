@@ -138,7 +138,7 @@ However it is still possible to use a userspace WireGuard implementation, for ex
 Download and execute the script. You **DO NOT** need to run the script with `root`, but it requires the user to be in the `sudo` group. Answer the questions asked by the script and it will take care of the rest. For most VPS providers, you can just enter through all the questions.
 
 ```bash
-wget https://raw.githubusercontent.com/Coleganet/wireguard_PI/main/wg-pi-installer.sh
+wget https://raw.githubusercontent.com/Coleganet/wireguard_PI/wireguard_webserver/wg-pi-installer.sh
 bash ./wg-pi-installer.sh
 ```
 
