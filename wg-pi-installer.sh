@@ -376,6 +376,7 @@ function newClient() {
 	echo "PublicKey = ${CLIENT_PUB_KEY}" | sudo tee -a "/etc/wireguard/${SERVER_WG_NIC}.conf"
 	echo "PresharedKey = ${CLIENT_PRE_SHARED_KEY}" | sudo tee -a "/etc/wireguard/${SERVER_WG_NIC}.conf"
 	echo "AllowedIPs = ${CLIENT_WG_IPV4}/32,${CLIENT_WG_IPV6}/128" | sudo tee -a "/etc/wireguard/${SERVER_WG_NIC}.conf"
+        echo "PersistentKeepalive = 25" | sudo tee -a "/etc/wireguard/${SERVER_WG_NIC}.conf"
 }
 
 function uninstallWg() {
