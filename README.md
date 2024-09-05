@@ -71,6 +71,19 @@ WireGuard does not fit your environment? Check out [openvpn-install](https://git
 
 Most part of this script is based on the angristan's [wireguard-install](https://github.com/angristan/wireguard-install/), because I am a new shell programmer so any improvement pull request is welcomed!
 
+## Clients
+
+  You can download the classic client for Windows, Linux or MAC in 
+  Wireguard Client Download Links https://download.wireguard.com/windows-client/
+  Wireguard Public Page https://www.wireguard.com/
+  Wireguard Github https://github.com/WireGuard
+
+  If you need a more advance clients with tunneling your ports I recommend Wiresock 
+  Wiresock for Download https://www.wiresock.net/wiresock-vpn-client/download
+  Public Page https://www.wiresock.net/
+  Wiresock Github https://github.com/wiresock/WireSockUI
+
+
 ## Customize the forwarding ports
 
 The reason why it is full cone is due to the DNAT route rules in the iptables:
