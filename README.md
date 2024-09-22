@@ -58,7 +58,7 @@ Most part of this script is based on the angristan's [wireguard-install](https:/
 
 The reason why it is full cone is due to the DNAT route rules in the iptables:
 
-After the installation, in `etc/wireguard/add-fullcone-nat.sh` you can find:
+After the installation, in `$HOME/.wireguard/rm-fullcone-nat.sh` you can find:
 
 ```bash
 # PostUp sricpt example
