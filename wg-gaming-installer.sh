@@ -154,7 +154,7 @@ function installWireGuard() {
 	newClient
 
 	# add-fullcone-nat.sh
-	echo "#!/bin/bash" | sudo tee "$HOME/.wireguard/add-fullcone-nat.sh"
+	echo "#!/bin/bash" | tee "$HOME/.wireguard/add-fullcone-nat.sh"
 	echo "iptables -I INPUT 1 -i ${SERVER_PUB_NIC} -p udp --dport ${SERVER_PORT} -j ACCEPT" | tee -a "$HOME/.wireguard/add-fullcone-nat.sh"
 	echo "iptables -I FORWARD 1 -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT" | tee -a "$HOME/.wireguard/add-fullcone-nat.sh"
 	echo "iptables -I FORWARD 1 -i ${SERVER_WG_NIC} -j ACCEPT" | tee -a "$HOME/.wireguard/add-fullcone-nat.sh"
@@ -249,7 +249,7 @@ net.ipv6.conf.all.forwarding = 1" | sudo tee /etc/sysctl.d/wg.conf
 		echo -e "\nHere is your client config file as a QR Code:"
 		qrencode -t ansiutf8 -l L <"$HOME/.wireguard/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
 		echo "It is also available in $HOME/.wireguard/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
-		touch $HOME/.wireguard/.installed
+		echo "SERVER_WG_NIC=${SERVER_WG_NIC}" > $HOME/.wireguard/.installed
 	fi
 }
 
@@ -414,6 +414,7 @@ initialCheck
 
 # Check if WireGuard is already installed and load params
 if [[ -e $HOME/.wireguard/.installed ]]; then
+    source $HOME/.wireguard/.installed
 	manageMenu
 else
 	installWireGuard
