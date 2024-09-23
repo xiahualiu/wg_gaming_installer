@@ -373,7 +373,7 @@ cleanConfigureWGClient() {
 
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
-	sudo rm -f "${SCRIPT_TEMP_FOLDER}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+	sudo rm -f "${SCRIPT_TEMP_FOLDER}/${SERVER_WG_NIC}-client-*"
 	sudo head -n 6 "${WG_CONF_FOLDER}/${SERVER_WG_NIC}.conf" | sudo tee "${WG_CONF_FOLDER}/${SERVER_WG_NIC}.conf"
 }
 
