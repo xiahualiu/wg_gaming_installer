@@ -10,6 +10,10 @@ WG_CONF_FOLDER="/etc/wireguard"
 # Userspace WireGuard will check TUN device
 TUN_DEV_PATH='/dev/net/tun'
 
+# Go path (only used when userspace WG is needed)
+GOROOT='/usr/local/bin/go'
+WG_GOROOT='/usr/local/bin/wireguard-go'
+
 # Color for pretty stdout.
 RED='\033[0;31m'
 ORANGE='\033[0;33m'
@@ -79,11 +83,19 @@ deleteFolders() {
 ### Step 2 ###
 installonDebian() {
 	sudo apt-get update
-	sudo apt-get install -y wireguard nftables resolvconf qrencode
+	sudo apt-get install -y wireguard nftables resolvconf qrencode curl git make
 }
 
 uninstallonDebian() {
 	sudo apt-get autoremove -y wireguard wireguard-tools qrencode
+	# If we have to use the userspace WireGuard
+	if [ $USERSPACE_WG = 'true' ]; then
+		sudo rm -rf "${SCRIPT_ROOT_DIR}/wireguard-go"
+		sudo rm -rf "$HOME/.go"
+		sudo unlink "$GOROOT" || true
+		sudo unlink "$WG_GOROOT" || true
+	fi
+
 }
 
 installWireGuard() {
@@ -91,6 +103,20 @@ installWireGuard() {
 	if [ "$OS" = 'ubuntu' ] || [ "$OS" = 'debian' ]; then
 		installonDebian
 	fi
+
+	# If we have to use the userspace WireGuard
+	if [ $USERSPACE_WG = 'true' ]; then
+		# Install go to GOPATH
+		bash <(curl -sL https://git.io/go-installer)
+		sudo ln -s "$HOME/.go/bin/go" "$GOROOT"
+		git clone "https://git.zx2c4.com/wireguard-go" "${SCRIPT_ROOT_DIR}/wireguard-go"
+		{
+			cd "${SCRIPT_ROOT_DIR}/wireguard-go"
+			make
+			sudo ln -s "${SCRIPT_ROOT_DIR}/wireguard-go/wireguard-go" "$WG_GOROOT"
+		}
+	fi
+
 }
 
 cleanUpInstall() {
@@ -368,6 +394,11 @@ startWireGuardServer() {
 	fi
 }
 
+cleanstartWireGuardServer() {
+	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}"
+	sudo systemctl disable "wg-quick@${SERVER_WG_NIC}"
+}
+
 uninstallWg() {
 	echo ""
 	echo -e "\n${RED}WARNING: This will uninstall WireGuard and remove all the configuration files!${NC}"
@@ -376,17 +407,14 @@ uninstallWg() {
 	REMOVE=${REMOVE:-n}
 	if [ "$REMOVE" = 'y' ]; then
 		checkOS
+		checkVirt
 
-		sudo systemctl stop "wg-quick@$SERVER_WG_NIC"
-		sudo systemctl disable "wg-quick@$SERVER_WG_NIC"
+		cleanstartWireGuardServer
+		cleanConfigureWGClient
+		cleanConfigureWGServer
+		cleanUpInstall
+		deleteFolders
 
-		if [ "$OS" = 'ubuntu' ] || [ "$OS" = 'debian' ]; then
-			uninstallonDebian
-		fi
-
-		sudo rm -f /etc/sysctl.d/wg.conf
-		# Reload sysctl
-		sudo sysctl --system
 		# Check if WireGuard is running
 		systemctl is-active --quiet "wg-quick@$SERVER_WG_NIC"
 
