@@ -1,5 +1,4 @@
 #!/bin/sh
-
 # Clear all rules
 nft flush ruleset
 # Add chains
@@ -16,6 +15,7 @@ nft 'add chain ip6 nat POSTROUTING { type nat hook postrouting priority srcnat ;
 nft 'add chain ip nat PREROUTING { type nat hook prerouting priority dstnat ; policy accept; }'
 nft 'add chain ip6 nat PREROUTING { type nat hook prerouting priority dstnat ; policy accept; }'
 
+# Masquerade SNAT
 nft add rule ip nat POSTROUTING oifname $SERVER_PUB_NIC counter masquerade comment "WireGuardGamingInstaller" || true
 nft add rule ip6 nat POSTROUTING oifname $SERVER_PUB_NIC counter masquerade comment "WireGuardGamingInstaller" || true
 

@@ -70,7 +70,10 @@ checkOS() {
 	fi
 }
 
-### Step 1 ###
+################################################################################
+######################## Step 1 : Prepare Folders ##############################
+################################################################################
+
 prepareFolders() {
 	sudo mkdir -p "$WG_CONF_FOLDER"
 	mkdir -p "$SCRIPT_TEMP_FOLDER"
@@ -80,7 +83,10 @@ deleteFolders() {
 	sudo rm -rf "$WG_CONF_FOLDER" "$SCRIPT_TEMP_FOLDER"
 }
 
-### Step 2 ###
+################################################################################
+########################## Step 2 : Install WG #################################
+################################################################################
+
 installonDebian() {
 	sudo apt-get update
 	sudo apt-get install -y wireguard nftables resolvconf qrencode curl git make
@@ -125,7 +131,10 @@ cleanUpInstall() {
 	fi
 }
 
-### Step 3 ###
+################################################################################
+####################### Step 3 : Configure WG Server ###########################
+################################################################################
+
 serverConfQuestions() {
 	clear
 	echo "I need to ask you a few questions to set up WireGuard server."
@@ -179,19 +188,6 @@ serverConfQuestions() {
 	done
 }
 
-checkSSHport() {
-	# Move if SSH port is within port range
-	if [ "${SSH_CLIENT##* }" -eq 53 ] || [ "${SSH_CLIENT##* }" -eq 80 ] || [ "${SSH_CLIENT##* }" -eq 88 ] ||
-		[ "${SSH_CLIENT##* }" -eq 500 ] || { [ "${SSH_CLIENT##* }" -gt 1024 ] && [ "${SSH_CLIENT##* }" -le 65000 ]; }; then
-		echo -n "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
-		read -n1 -r
-		sudo sed -i 's/Port\s\+[0-9]\+/Port 65432/' /etc/ssh/sshd_config
-		# Restart ssh service
-		sudo systemctl restart ssh.service || true
-		sudo systemctl restart sshd.service || true
-	fi
-}
-
 storeServerParams() {
 	{
 		echo "# Parameters used for WireGuard server configuration."
@@ -208,14 +204,11 @@ storeServerParams() {
 }
 
 configureWGServer() {
-	# User inputs
 	serverConfQuestions
 
-	# Server keygen
 	SERVER_PRIV_KEY=$(wg genkey)
 	SERVER_PUB_KEY=$(echo "${SERVER_PRIV_KEY}" | wg pubkey)
 
-	# Add server interface
 	{
 		echo "[Interface]"
 		echo "Address = ${SERVER_WG_IPV4}/24,${SERVER_WG_IPV6}/64"
@@ -225,7 +218,6 @@ configureWGServer() {
 		echo "PostDown = ${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 
-	# Store all params
 	storeServerParams
 }
 
@@ -234,7 +226,10 @@ cleanConfigureWGServer() {
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}/.s3params" || true
 }
 
-### Step 4 ###
+################################################################################
+####################### Step 4 : Configure WG Client ###########################
+################################################################################
+
 newClientQuestions() {
 	# If server public ip is ipv6, add [] when needed
 	if echo "${SERVER_PUB_IP}" | grep -q ':'; then
@@ -372,12 +367,28 @@ cleanConfigureWGClient() {
 	sudo head -n 6 "${WG_CONF_FOLDER}/${SERVER_WG_NIC}.conf" | sudo tee "${WG_CONF_FOLDER}/${SERVER_WG_NIC}.conf"
 }
 
-### Step 5 ###
+################################################################################
+######################### Step 5 : Start WG Server #############################
+################################################################################
+
+checkSSHport() {
+	if [ "${SSH_CLIENT##* }" -eq 53 ] || [ "${SSH_CLIENT##* }" -eq 80 ] || [ "${SSH_CLIENT##* }" -eq 88 ] ||
+		[ "${SSH_CLIENT##* }" -eq 500 ] || { [ "${SSH_CLIENT##* }" -gt 1024 ] && [ "${SSH_CLIENT##* }" -le 65000 ]; }; then
+		echo -n "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
+		read -n1 -r
+		sudo sed -i 's/Port\s\+[0-9]\+/Port 65432/' /etc/ssh/sshd_config
+		sudo systemctl restart ssh.service || true
+		sudo systemctl restart sshd.service || true
+	fi
+}
+
 startWireGuardServer() {
+	# Check and move SSH port before starting WG
+	checkSSHport()
+
 	sudo systemctl start "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl enable "wg-quick@${SERVER_WG_NIC}"
 
-	# WireGuard might not work if we updated the kernel. Tell the user to reboot
 	if ! systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"; then
 		echo -e "\n${RED}WARNING: WireGuard does not seem to be running.${NC}"
 		echo -e "${ORANGE}You can check if WireGuard is running with: systemctl status wg-quick@$SERVER_WG_NIC${NC}"
@@ -401,9 +412,6 @@ uninstallWg() {
 	read -rp "Do you really want to remove WireGuard? [y/n]: " -e REMOVE
 	REMOVE=${REMOVE:-n}
 	if [ "$REMOVE" = 'y' ]; then
-		checkOS
-		checkVirt
-
 		cleanstartWireGuardServer
 		cleanConfigureWGClient
 		cleanConfigureWGServer
@@ -411,8 +419,6 @@ uninstallWg() {
 		deleteFolders
 
 		# Check if WireGuard is running
-		systemctl is-active --quiet "wg-quick@$SERVER_WG_NIC"
-
 		if systemctl is-active --quiet "wg-quick@$SERVER_WG_NIC"; then
 			echo "WireGuard failed to uninstall properly."
 			exit 1
@@ -458,6 +464,11 @@ manageMenu() {
 	esac
 }
 
+
+################################################################################
+############################# Script Beginning #################################
+################################################################################
+
 checkVirt
 checkOS
 
@@ -465,37 +476,44 @@ checkOS
 if cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Final Step Done'; then
 	source "$SCRIPT_TEMP_FOLDER/.s3params"
 	manageMenu
+	exit 0
+fi
+
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 1 Done: Created Folders'; then
+	# 1st Step: Preparing folders
+	trap deleteFolders EXIT
+	prepareFolders
+	echo 'Step 1 Done: Created Folders' >>"$SCRIPT_TEMP_FOLDER/.status"
+	trap - EXIT
+fi
+
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 2 Done: Installed WG binary'; then
+	# 2nd Step: Install WireGuard binary to system
+	trap cleanUpInstall EXIT
+	installWireGuard
+	echo 'Step 2 Done: Installed WG binary' >>"$SCRIPT_TEMP_FOLDER/.status"
+	trap - EXIT
+fi
+
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 3 Done: Configured WG server'; then
+	# 3rd Step: Configure WireGuard server
+	trap cleanConfigureWGServer EXIT
+	configureWGServer
+	echo 'Step 3 Done: Configured WG server' >>"$SCRIPT_TEMP_FOLDER/.status"
+	trap - EXIT
 else
-	if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 1 Done: Created Folders'; then
-		# 1st Step: Preparing folders
-		trap deleteFolders EXIT
-		prepareFolders
-		echo 'Step 1 Done: Created Folders' >>"$SCRIPT_TEMP_FOLDER/.status"
-		trap - EXIT
-	fi
-	if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 2 Done: Installed WG binary'; then
-		# 2nd Step: Install WireGuard binary to system
-		trap cleanUpInstall EXIT
-		installWireGuard
-		echo 'Step 2 Done: Installed WG binary' >>"$SCRIPT_TEMP_FOLDER/.status"
-		trap - EXIT
-	fi
-	if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 3 Done: Configured WG server'; then
-		# 3rd Step: Configure WireGuard server
-		trap cleanConfigureWGServer EXIT
-		configureWGServer
-		echo 'Step 3 Done: Configured WG server' >>"$SCRIPT_TEMP_FOLDER/.status"
-		trap - EXIT
-	else
-		source "$SCRIPT_TEMP_FOLDER/.s3params"
-	fi
-	if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 4 Done: Configured WG client'; then
-		# 4rd Step: Configure WireGuard client
-		trap cleanConfigureWGClient EXIT
-		configureWGClient
-		echo 'Step 4 Done: Configured WG client' >>"$SCRIPT_TEMP_FOLDER/.status"
-		trap - EXIT
-	fi
+	source "$SCRIPT_TEMP_FOLDER/.s3params"
+fi
+
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 4 Done: Configured WG client'; then
+	# 4rd Step: Configure WireGuard client
+	trap cleanConfigureWGClient EXIT
+	configureWGClient
+	echo 'Step 4 Done: Configured WG client' >>"$SCRIPT_TEMP_FOLDER/.status"
+	trap - EXIT
+fi
+
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Final Step Done'; then
 	# 5th Step: Start WireGuard server
 	trap cleanstartWireGuardServer EXIT
 	startWireGuardServer
