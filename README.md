@@ -1,3 +1,4 @@
+[![ShellCheck](https://github.com/xiahualiu/wg_gaming_installer/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/xiahualiu/wg_gaming_installer/actions/workflows/shellcheck.yml)
 # WireGuard installer for Gaming
 
 **Thank you for all the stars!**
