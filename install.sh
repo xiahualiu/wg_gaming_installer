@@ -131,7 +131,7 @@ installWireGuard() {
 
 cleanUpInstall() {
 	if [ "${OS}" = 'ubuntu' ] || [ "${OS}" = 'debian' ]; then
-		uninstallonDebian()
+		uninstallonDebian
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then
