@@ -31,11 +31,11 @@ checkVirt() {
 	USERSPACE_WG='false'
 
 	if [ "$OS_VIRT" = 'openvz' ]; then
-		echo -e "OpenVZ is detected, ${RED}wireguard-go${RED} will be installed, instead of the kernel wireguard."
+		echo -e "OpenVZ is detected, ${RED}wireguard-go${NC} will be installed, instead of the kernel wireguard."
 		USERSPACE_WG="true"
 	fi
 	if [ "$OS_VIRT" = 'lxc' ]; then
-		echo -e "LXC is detected, ${RED}wireguard-go${RED} will be installed, instead of the kernel wireguard."
+		echo -e "LXC is detected, ${RED}wireguard-go${NC} will be installed, instead of the kernel wireguard."
 		USERSPACE_WG='true'
 	fi
 
