@@ -11,7 +11,7 @@ WG_CONF_FOLDER="/etc/wireguard"
 TUN_DEV_PATH='/dev/net/tun'
 
 # Go path (only used when userspace WG is needed)
-GOROOT='/usr/local/bin/go'
+GO_INSTALL_PATH='/usr/local/bin/go'
 WG_GOROOT='/usr/local/bin/wireguard-go'
 
 # Color for pretty stdout.
@@ -92,7 +92,7 @@ uninstallonDebian() {
 	if [ $USERSPACE_WG = 'true' ]; then
 		sudo rm -rf "${SCRIPT_ROOT_DIR}/wireguard-go"
 		sudo rm -rf "$HOME/.go"
-		sudo unlink "$GOROOT" || true
+		sudo unlink "$GO_INSTALL_PATH" || true
 		sudo unlink "$WG_GOROOT" || true
 	fi
 
@@ -108,7 +108,7 @@ installWireGuard() {
 	if [ $USERSPACE_WG = 'true' ]; then
 		# Install go to GOPATH
 		bash <(curl -sL https://git.io/go-installer)
-		sudo ln -s "$HOME/.go/bin/go" "$GOROOT"
+		sudo ln -s "$HOME/.go/bin/go" "$GO_INSTALL_PATH"
 		git clone "https://git.zx2c4.com/wireguard-go" "${SCRIPT_ROOT_DIR}/wireguard-go"
 		{
 			cd "${SCRIPT_ROOT_DIR}/wireguard-go"
