@@ -5,15 +5,15 @@
 
 **This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports only ONE WireGuard client!**
 
-You can share the client configuration files to multiple devices. However only one of the client can run at the same time.
+You can share the client configuration file among multiple devices. However only one of the client can be active at the same time.
 
 If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
 
 ## Update Logs
 
 - 09/23/2024 Major update.
-    - Added support for OpenVZ, LXC with wireguard-go userspace implementation.
-    - Switched from legacy `iptables` to `nftables` rules, aligning with main Linux distributions.
+    - Added support for OpenVZ, LXC by installing wireguard-go.
+    - Switched from legacy `iptables` to `nftables` rules.
     - Added shellcheck GitHub Action.
 
 ## What it does
@@ -34,7 +34,7 @@ With this script, you do not need to enable port forwarding on your router, you 
 
 >The local ports will be forwarded to the server directly.
 
-It solves the following scenarios:
+It solves connection problems due to strict NAT in these scenarios:
 
 1. You want to host a Minecraft/Terraria, etc. server online and play with your friend, but you cannot figure out how to enable port forwarding on your router, or your ISP just did not give you a public IP address.
 
@@ -52,11 +52,7 @@ The script supports both IPv4 and IPv6.
 
 WireGuard does not fit your environment? Check out [openvpn-install](https://github.com/angristan/openvpn-install).
 
-Most part of this script is based on the angristan's [wireguard-install](https://github.com/angristan/wireguard-install/), because I am a new shell programmer so any improvement pull request is welcomed!
-
 ## Customize the forwarding ports
-
-The reason why it is full cone is due to the DNAT route rules in the iptables:
 
 After the installation, in `$HOME/.wireguard/add-fullcone-nat.sh` you can find:
 
@@ -91,22 +87,22 @@ If the game needs port that is not covered inside, you can modify the postup and
  
 ## Requirements
 
-Main branch supported distributions:
+Supported distributions:
 
 - Debian >= 11
 - Ubuntu >= 20.04 (*Preferred*)
 
-Theoretically any OS that supports `nftables` can run this script without too much trouble. It will support more Linux distributions in the future as I need time to test them one by one.
+Theoretically any OS that supports `nftables` can run this script without too much trouble. It will support more Linux distributions in the future after I test them out one by one.
 
-This script supports for both **KVM** and **OpenVZ** machines. 
+This script supports both **KVM** and **OpenVZ**, **LXC** machine virtualization types. 
 
-For **OpenVZ** machine, [`wireguard-go`](https://github.com/WireGuard/wireguard-go) will be installed instead of the kernel WireGuard implementation.
+For **OpenVZ**, **LXC** typed machine, [`wireguard-go`](https://github.com/WireGuard/wireguard-go) will be installed instead of the kernel WireGuard implementation.
 
-In this case, you need to enable TUN/TAP driver from your provider's managment panal first.
+In this case, you need to enable TUN/TAP driver on your provider's managment panal first.
 
 ## Usage
 
-Download and execute the script. You **DO NOT** need to run the script with `root`, but it requires the user to be in the `sudo` group. 
+Download and execute the script. Script user needs to be able to use `sudo` command.
 
 Answer the questions asked by the script and it will take care of the rest. For most VPS providers, you can just enter through all the questions.
 
@@ -118,12 +114,12 @@ cd ./wg_gaming_installer
 
 ## Server Public IP problem
 
-This script need to run on a server with a public IP address.
+This script needs to run on a server with a public IP address to work.
 
-Normally the server public IP should be populated automatically, however for some cloud providers like Google Cloud Platform and Oracle Cloud, the auto value is NOT the correct public IP address, but a subnet IP address (usually starts with `10.*.*.*`).
+Typically the server public IP should be populated automatically. However for some cloud providers like Google Cloud Platform and Oracle Cloud, the auto-populated public IP address is NOT the correct, but instead a subnet IP address (usually starts with `10.*.*.*`).
 
 In these cases you need to change the value to what your server's acutal public IP is.
 
-## Stop / Restart / Uninstal
+## Stop / Restart / Uninstall
 
 Run the script again will give you these options!
