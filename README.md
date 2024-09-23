@@ -8,6 +8,13 @@ You can share the client configuration files to multiple devices. However only o
 
 If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
 
+## Update Logs
+
+- 09/23/2024 Major update.
+    - Added support for OpenVZ, LXC with wireguard-go userspace implementation.
+    - Switched from legacy `iptables` to `nftables` rules, aligning with main Linux distributions.
+    - Added shellcheck GitHub Action.
+
 ## What it does
 
 #### Before using WireGuard
