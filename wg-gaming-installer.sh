@@ -177,11 +177,6 @@ serverConfQuestions() {
 			CLIENT_DNS_2="${CLIENT_DNS_1}"
 		fi
 	done
-	echo ""
-	echo "Okay, that was all I needed. We are ready to setup your WireGuard server now."
-	echo "You will be able to generate a client at the end of the installation."
-	echo "Press any key to continue..."
-	read -n1 -r
 }
 
 checkSSHport() {
