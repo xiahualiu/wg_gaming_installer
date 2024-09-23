@@ -31,17 +31,17 @@ checkVirt() {
 	USERSPACE_WG='false'
 
 	if [ "$OS_VIRT" = 'openvz' ]; then
-		echo "OpenVZ is detected, ${RED}wireguard-go${RED} will be installed, instead of the kernel wireguard."
+		echo -e "OpenVZ is detected, ${RED}wireguard-go${RED} will be installed, instead of the kernel wireguard."
 		USERSPACE_WG="true"
 	fi
 	if [ "$OS_VIRT" = 'lxc' ]; then
-		echo "LXC is detected, ${RED}wireguard-go${RED} will be installed, instead of the kernel wireguard."
+		echo -e "LXC is detected, ${RED}wireguard-go${RED} will be installed, instead of the kernel wireguard."
 		USERSPACE_WG='true'
 	fi
 
 	# Check if TUN/TAP device is enabled if userspace WG is used
 	if [ $USERSPACE_WG = 'true' ]; then
-		if ! sudo cat "$TUN_DEV_PATH"; then
+		if ! sudo ls "$TUN_DEV_PATH"; then
 			echo "$TUN_DEV_PATH not found, please enable TUN/TAP device driver for using userspace WireGuard."
 			exit 1
 		fi
@@ -506,7 +506,4 @@ else
 	startWireGuardServer
 	echo 'Final Step Done' >>"$SCRIPT_TEMP_FOLDER/.status"
 	trap - EXIT
-
-	# Configure questions
-	serverConfQuestions
 fi
