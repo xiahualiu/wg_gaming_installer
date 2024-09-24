@@ -64,6 +64,8 @@ checkOS() {
 			echo "Your version of Ubuntu (${VERSION_ID}) is not supported. Please use Ubuntu 20.04 or later"
 			exit 1
 		fi
+	elif [ "$OS" = 'almalinux' ]; then
+		:
 	else
 		echo "Your Linux distribution (${OS}) is not supported. Please use Ubuntu 20.04 or later"
 		exit 1
@@ -89,11 +91,22 @@ deleteFolders() {
 
 installonDebian() {
 	sudo apt-get update
-	sudo apt-get install -y wireguard nftables resolvconf qrencode curl git make
+	sudo apt-get install -y wireguard nftables qrencode curl git make
 }
 
 uninstallonDebian() {
 	sudo apt-get autoremove -y wireguard wireguard-tools qrencode
+}
+
+installAlmaLinux() {
+	sudo dnf update
+	sudo dnf install -y epel-release elrepo-release
+	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make
+}
+
+uninstallAlmaLinux() {
+	sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
+	sudo dnf clean all
 }
 
 installUserspaceWG() {
@@ -121,17 +134,20 @@ installWireGuard() {
 	# Install WireGuard tools and module
 	if [ "$OS" = 'ubuntu' ] || [ "$OS" = 'debian' ]; then
 		installonDebian
+	elif [ "$OS" = 'almalinux' ]; then
+		installAlmaLinux
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then
 		installUserspaceWG
 	fi
-
 }
 
 cleanUpInstall() {
 	if [ "${OS}" = 'ubuntu' ] || [ "${OS}" = 'debian' ]; then
 		uninstallonDebian
+	elif [ "$OS" = 'almalinux' ]; then
+		uninstallAlmaLinux
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then
