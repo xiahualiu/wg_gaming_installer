@@ -212,22 +212,6 @@ serverConfQuestions() {
 		fi
 	done
 }
-
-storeServerParams() {
-	{
-		echo "# Parameters used for WireGuard server configuration."
-		echo "SERVER_PUB_IP=${SERVER_PUB_IP}"
-		echo "SERVER_PUB_NIC=$SERVER_PUB_NIC"
-		echo "SERVER_WG_NIC=$SERVER_WG_NIC"
-		echo "SERVER_WG_IPV4=${SERVER_WG_IPV4}"
-		echo "SERVER_WG_IPV6=${SERVER_WG_IPV6}"
-		echo "SERVER_PORT=$SERVER_PORT"
-		echo "CLIENT_DNS_1=${CLIENT_DNS_1}"
-		echo "CLIENT_DNS_2=${CLIENT_DNS_2}"
-		echo "SERVER_PUB_KEY=${SERVER_PUB_KEY}"
-	} >"${SCRIPT_TEMP_FOLDER}/.s3params"
-}
-
 configureWGServer() {
 	serverConfQuestions
 
@@ -242,20 +226,9 @@ configureWGServer() {
 		echo "PostUp = ${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
 		echo "PostDown = ${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
-
-	storeServerParams
 }
 
-cleanConfigureWGServer() {
-	sudo rm -f "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf" || true
-	sudo rm -f "${SCRIPT_TEMP_FOLDER}/.s3params" || true
-}
-
-################################################################################
-####################### Step 4 : Configure WG Client ###########################
-################################################################################
-
-newClientQuestions() {
+clientQuestions() {
 	# If server public ip is ipv6, add [] when needed
 	if echo "${SERVER_PUB_IP}" | grep -q ':'; then
 		if (! echo "${SERVER_PUB_IP}" | grep -qE '^\[') && (! echo "${SERVER_PUB_IP}" | grep -qE '\]$'); then
@@ -328,6 +301,28 @@ newClientQuestions() {
 			echo ""
 		fi
 	done
+}
+
+createNATscripts() {
+	cp "${SCRIPT_ROOT_DIR}/templates/add-fullcone-nat.sh" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
+	cp "${SCRIPT_ROOT_DIR}/templates/rm-fullcone-nat.sh" "${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
+
+	sed -i "s/\$SERVER_PUB_NIC/${SERVER_PUB_NIC}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
+	sed -i "s/\$SERVER_PORT/${SERVER_PORT}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
+	sed -i "s/\$SERVER_WG_NIC/${SERVER_WG_NIC}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
+	sed -i "s/\$CLIENT_WG_IPV4/${CLIENT_WG_IPV4}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
+	sed -i "s/\$CLIENT_WG_IPV6/${CLIENT_WG_IPV6}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
+
+	sudo chmod +x "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
+	sudo chmod +x "${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
+	# Enable routing on the server
+	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
+	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
+	sudo sysctl --system
+}
+
+configureWGClient() {
+	clientQuestions
 
 	# Generate key pair for the client
 	CLIENT_PRIV_KEY=$(wg genkey)
@@ -357,43 +352,39 @@ newClientQuestions() {
 		echo "AllowedIPs = $CLIENT_WG_IPV4/32,$CLIENT_WG_IPV6/128"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 
-}
-
-createNATscripts() {
-	cp "${SCRIPT_ROOT_DIR}/templates/add-fullcone-nat.sh" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	cp "${SCRIPT_ROOT_DIR}/templates/rm-fullcone-nat.sh" "${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
-
-	sed -i "s/\$SERVER_PUB_NIC/${SERVER_PUB_NIC}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sed -i "s/\$SERVER_PORT/${SERVER_PORT}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sed -i "s/\$SERVER_WG_NIC/${SERVER_WG_NIC}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sed -i "s/\$CLIENT_WG_IPV4/${CLIENT_WG_IPV4}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sed -i "s/\$CLIENT_WG_IPV6/${CLIENT_WG_IPV6}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-
-	sudo chmod +x "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sudo chmod +x "${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
-	# Enable routing on the server
-	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
-	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
-	sudo sysctl --system
-}
-
-configureWGClient() {
-	newClientQuestions
 	createNATscripts
 }
 
-cleanConfigureWGClient() {
+storeParams() {
+	{
+		echo "# Parameters used for WireGuard server configuration."
+		echo "SERVER_PUB_IP=${SERVER_PUB_IP}"
+		echo "SERVER_PUB_NIC=$SERVER_PUB_NIC"
+		echo "SERVER_WG_NIC=$SERVER_WG_NIC"
+		echo "SERVER_WG_IPV4=${SERVER_WG_IPV4}"
+		echo "SERVER_WG_IPV6=${SERVER_WG_IPV6}"
+		echo "SERVER_PORT=$SERVER_PORT"
+		echo "CLIENT_DNS_1=${CLIENT_DNS_1}"
+		echo "CLIENT_DNS_2=${CLIENT_DNS_2}"
+		echo "SERVER_PUB_KEY=${SERVER_PUB_KEY}"
+		echo "CLIENT_NAME=${CLIENT_NAME}"
+	} >"${SCRIPT_TEMP_FOLDER}/.params"
+}
+
+cleanConfigureWGServer() {
+	# Clean server conf
+	sudo rm -f "${WG_CONF_FOLDER}/*.conf"
 	sudo rm -f "/etc/sysctl.d/wg.conf"
 	sudo sysctl --system
-
-	sudo rm -f "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sudo rm -f "${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
-	sudo rm -f "${SCRIPT_TEMP_FOLDER}/${SERVER_WG_NIC}-client-*"
-	sudo head -n 6 "${WG_CONF_FOLDER}/${SERVER_WG_NIC}.conf" | sudo tee "${WG_CONF_FOLDER}/${SERVER_WG_NIC}.conf"
+	# Clean client conf
+	sudo rm -f "${SCRIPT_TEMP_FOLDER}/*.sh"
+	sudo rm -f "${SCRIPT_TEMP_FOLDER}/*.conf"
+	# Clean params
+	sudo rm -f "${SCRIPT_TEMP_FOLDER}/.params"
 }
 
 ################################################################################
-######################### Step 5 : Start WG Server #############################
+####################### Final Step : Start WG Server ###########################
 ################################################################################
 
 checkSSHport() {
@@ -420,8 +411,8 @@ startWireGuardServer() {
 		echo -e "${ORANGE}If you get something like \"Cannot find device $SERVER_WG_NIC\", please reboot!${NC}"
 	else
 		echo -e "\nHere is your client config file as a QR Code:"
-		qrencode -t ansiutf8 -l L < "$(find "${SCRIPT_TEMP_FOLDER}" -name "$SERVER_WG_NIC-client-*")"
-		echo "It is also available in $HOME/.wireguard/$SERVER_WG_NIC-client-*.conf"
+		qrencode -t ansiutf8 -l L <"${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
+		echo "It is also available in ${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 	fi
 }
 
@@ -438,7 +429,6 @@ uninstallWg() {
 	REMOVE=${REMOVE:-n}
 	if [ "$REMOVE" = 'y' ]; then
 		cleanstartWireGuardServer
-		cleanConfigureWGClient
 		cleanConfigureWGServer
 		cleanUpInstall
 		deleteFolders
@@ -489,7 +479,6 @@ manageMenu() {
 	esac
 }
 
-
 ################################################################################
 ############################# Script Beginning #################################
 ################################################################################
@@ -499,7 +488,7 @@ checkOS
 
 # Check if WireGuard is already installed and load params
 if cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Final Step Done'; then
-	source "$SCRIPT_TEMP_FOLDER/.s3params"
+	source "$SCRIPT_TEMP_FOLDER/.params"
 	manageMenu
 	exit 0
 fi
@@ -524,18 +513,12 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 3 Done: Configured WG ser
 	# 3rd Step: Configure WireGuard server
 	trap cleanConfigureWGServer EXIT
 	configureWGServer
+	configureWGClient
+	storeParams
 	echo 'Step 3 Done: Configured WG server' >>"$SCRIPT_TEMP_FOLDER/.status"
 	trap - EXIT
 else
-	source "$SCRIPT_TEMP_FOLDER/.s3params"
-fi
-
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 4 Done: Configured WG client'; then
-	# 4rd Step: Configure WireGuard client
-	trap cleanConfigureWGClient EXIT
-	configureWGClient
-	echo 'Step 4 Done: Configured WG client' >>"$SCRIPT_TEMP_FOLDER/.status"
-	trap - EXIT
+	source "$SCRIPT_TEMP_FOLDER/.params"
 fi
 
 if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Final Step Done'; then
