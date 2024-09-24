@@ -99,6 +99,7 @@ uninstallonDebian() {
 }
 
 installAlmaLinux() {
+	rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
 	sudo dnf update
 	sudo dnf install -y epel-release elrepo-release
 	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make
