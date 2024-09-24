@@ -91,6 +91,7 @@ Supported distributions:
 
 - Debian >= 11
 - Ubuntu >= 20.04 (*Preferred*)
+- AlmaLinux
 
 Theoretically any OS that supports `nftables` can run this script without too much trouble. It will support more Linux distributions in the future after I test them out one by one.
 
@@ -101,6 +102,23 @@ For **OpenVZ**, **LXC** typed machine, [`wireguard-go`](https://github.com/WireG
 In this case, you need to enable TUN/TAP driver on your provider's managment panal first.
 
 ## Usage
+
+### 1st Step: Upgrade kernel version
+
+Because WireGuard is a kernel module, you **MUST** upgrade the kernel to latest first and reboot your server once.
+
+```bash
+# If you are using Ubuntu/Debian, etc
+sudo apt update && sudo apt upgrade -y
+
+# If you are using Fedora, AlmaLinux, etc
+sudo dnf update -y
+
+# Reboot once
+sudo reboot
+```
+
+### 2nd Step: Download and run the script.
 
 Download and execute the script. Script user needs to be able to use `sudo` command.
 
