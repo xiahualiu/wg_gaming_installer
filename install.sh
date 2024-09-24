@@ -428,11 +428,10 @@ uninstallWg() {
 	read -rp "Do you really want to remove WireGuard? [y/n]: " -e REMOVE
 	REMOVE=${REMOVE:-n}
 	if [ "$REMOVE" = 'y' ]; then
-		cleanstartWireGuardServer &
-		cleanConfigureWGServer &
-		cleanUpInstall &
-		deleteFolders &
-		wait
+		cleanstartWireGuardServer
+		cleanConfigureWGServer
+		cleanUpInstall
+		deleteFolders
 
 		# Check if WireGuard is running
 		if systemctl is-active --quiet "wg-quick@$SERVER_WG_NIC"; then
