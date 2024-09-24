@@ -105,7 +105,7 @@ In this case, you need to enable TUN/TAP driver on your provider's managment pan
 
 ### 1st Step: Upgrade kernel version
 
-Because WireGuard is a kernel module, you **MUST** upgrade the kernel to latest first then reboot your server once.
+Because WireGuard is a kernel module, you **MUST** upgrade the kernel to latest first and reboot your server once.
 
 ```bash
 # If you are using Ubuntu/Debian, etc
