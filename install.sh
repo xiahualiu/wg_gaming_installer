@@ -420,7 +420,7 @@ startWireGuardServer() {
 		echo -e "${ORANGE}If you get something like \"Cannot find device $SERVER_WG_NIC\", please reboot!${NC}"
 	else
 		echo -e "\nHere is your client config file as a QR Code:"
-		qrencode -t ansiutf8 -l L < $(find ${SCRIPT_TEMP_FOLDER} -name "*-client-*")
+		qrencode -t ansiutf8 -l L < "$(find "${SCRIPT_TEMP_FOLDER}" -name "$SERVER_WG_NIC-client-*")"
 		echo "It is also available in $HOME/.wireguard/$SERVER_WG_NIC-client-*.conf"
 	fi
 }

@@ -103,6 +103,23 @@ In this case, you need to enable TUN/TAP driver on your provider's managment pan
 
 ## Usage
 
+### 1st Step: Upgrade kernel version
+
+Because WireGuard is a kernel module, you **MUST** upgrade the kernel to latest first then reboot your server once.
+
+```bash
+# If you are using Ubuntu/Debian, etc
+sudo apt update && sudo apt upgrade -y
+
+# If you are using Fedora, AlmaLinux, etc
+sudo dnf update -y
+
+# Reboot once
+sudo reboot
+```
+
+### 2nd Step: Download and run the script.
+
 Download and execute the script. Script user needs to be able to use `sudo` command.
 
 Answer the questions asked by the script and it will take care of the rest. For most VPS providers, you can just enter through all the questions.
