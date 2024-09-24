@@ -99,15 +99,15 @@ uninstallonDebian() {
 }
 
 installAlmaLinux() {
-	rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
-	sudo dnf update
+	sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+	sudo dnf update -y
 	sudo dnf install -y epel-release elrepo-release
 	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make
 }
 
 uninstallAlmaLinux() {
 	sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
-	sudo dnf clean all
+	sudo dnf clean all -y
 }
 
 installUserspaceWG() {
