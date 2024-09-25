@@ -66,6 +66,8 @@ checkOS() {
 		fi
 	elif [ "$OS" = 'almalinux' ]; then
 		:
+	elif [ "$OS" = 'arch' ]; then
+		:
 	else
 		echo "Your Linux distribution (${OS}) is not supported. Please use Ubuntu 20.04 or later"
 		exit 1
@@ -91,7 +93,7 @@ deleteFolders() {
 
 installonDebian() {
 	sudo apt-get update
-	sudo apt-get install -y wireguard nftables qrencode curl git make
+	sudo apt-get install -y wireguard nftables qrencode curl git make wget
 }
 
 uninstallonDebian() {
@@ -102,12 +104,20 @@ installAlmaLinux() {
 	sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
 	sudo dnf update -y
 	sudo dnf install -y epel-release elrepo-release
-	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make
+	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make wget
 }
 
 uninstallAlmaLinux() {
 	sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
 	sudo dnf clean all -y
+}
+
+installArchLinux() {
+	sudo pacman -Sy --noconfirm wireguard-tools nftables qrencode curl git make wget
+}
+
+uninstallArchLinux() {
+	sudo pacman -R --noconfirm wireguard-tools qrencode
 }
 
 installUserspaceWG() {
@@ -137,6 +147,8 @@ installWireGuard() {
 		installonDebian
 	elif [ "$OS" = 'almalinux' ]; then
 		installAlmaLinux
+	elif [ "$OS" = 'arch' ]; then
+		installArchLinux
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then
@@ -149,6 +161,8 @@ cleanUpInstall() {
 		uninstallonDebian
 	elif [ "$OS" = 'almalinux' ]; then
 		uninstallAlmaLinux
+	elif [ "$OS" = 'arch' ]; then
+		uninstallArchLinux
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then
@@ -388,6 +402,9 @@ cleanConfigureWGServer() {
 ################################################################################
 
 checkSSHport() {
+	if [ -z ${SSH_CLIENT+x} ]; then
+		return
+	fi
 	if [ "${SSH_CLIENT##* }" -eq 53 ] || [ "${SSH_CLIENT##* }" -eq 80 ] || [ "${SSH_CLIENT##* }" -eq 88 ] ||
 		[ "${SSH_CLIENT##* }" -eq 500 ] || { [ "${SSH_CLIENT##* }" -gt 1024 ] && [ "${SSH_CLIENT##* }" -le 65000 ]; }; then
 		echo -n "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
@@ -487,13 +504,13 @@ checkVirt
 checkOS
 
 # Check if WireGuard is already installed and load params
-if cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Final Step Done'; then
+if cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Final Step Done'; then
 	source "$SCRIPT_TEMP_FOLDER/.params"
 	manageMenu
 	exit 0
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 1 Done: Created Folders'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 1 Done: Created Folders'; then
 	# 1st Step: Preparing folders
 	trap deleteFolders EXIT
 	prepareFolders
@@ -501,7 +518,7 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 1 Done: Created Folders';
 	trap - EXIT
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 2 Done: Installed WG binary'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 2 Done: Installed WG binary'; then
 	# 2nd Step: Install WireGuard binary to system
 	trap cleanUpInstall EXIT
 	installWireGuard
@@ -509,7 +526,7 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 2 Done: Installed WG bina
 	trap - EXIT
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 3 Done: Configured WG server'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 3 Done: Configured WG server'; then
 	# 3rd Step: Configure WireGuard server
 	trap cleanConfigureWGServer EXIT
 	configureWGServer
@@ -521,7 +538,7 @@ else
 	source "$SCRIPT_TEMP_FOLDER/.params"
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Final Step Done'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Final Step Done'; then
 	# 5th Step: Start WireGuard server
 	trap cleanstartWireGuardServer EXIT
 	startWireGuardServer

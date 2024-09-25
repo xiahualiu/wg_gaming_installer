@@ -92,6 +92,7 @@ Supported distributions:
 - Debian >= 11
 - Ubuntu >= 20.04 (*Preferred*)
 - AlmaLinux
+- ArchLinux
 
 Theoretically any OS that supports `nftables` can run this script without too much trouble. It will support more Linux distributions in the future after I test them out one by one.
 
@@ -113,6 +114,9 @@ sudo apt update && sudo apt upgrade -y
 
 # If you are using Fedora, AlmaLinux, etc
 sudo dnf update -y
+
+# Arch, etc.
+sudo pacman -Syu
 
 # Reboot once
 sudo reboot
