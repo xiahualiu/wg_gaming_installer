@@ -113,7 +113,7 @@ uninstallAlmaLinux() {
 }
 
 installArchLinux() {
-	sudo pacman -S --noconfirm wireguard-tools nftables qrencode curl git make
+	sudo pacman -Sy --noconfirm wireguard-tools nftables qrencode curl git make
 }
 
 uninstallArchLinux() {
