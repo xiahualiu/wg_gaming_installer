@@ -93,7 +93,7 @@ deleteFolders() {
 
 installonDebian() {
 	sudo apt-get update
-	sudo apt-get install -y wireguard nftables qrencode curl git make
+	sudo apt-get install -y wireguard nftables qrencode curl git make wget
 }
 
 uninstallonDebian() {
@@ -104,7 +104,7 @@ installAlmaLinux() {
 	sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
 	sudo dnf update -y
 	sudo dnf install -y epel-release elrepo-release
-	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make
+	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make wget
 }
 
 uninstallAlmaLinux() {
@@ -113,7 +113,7 @@ uninstallAlmaLinux() {
 }
 
 installArchLinux() {
-	sudo pacman -Sy --noconfirm wireguard-tools nftables qrencode curl git make
+	sudo pacman -Sy --noconfirm wireguard-tools nftables qrencode curl git make wget
 }
 
 uninstallArchLinux() {
@@ -504,13 +504,13 @@ checkVirt
 checkOS
 
 # Check if WireGuard is already installed and load params
-if cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Final Step Done'; then
+if cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Final Step Done'; then
 	source "$SCRIPT_TEMP_FOLDER/.params"
 	manageMenu
 	exit 0
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 1 Done: Created Folders'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 1 Done: Created Folders'; then
 	# 1st Step: Preparing folders
 	trap deleteFolders EXIT
 	prepareFolders
@@ -518,7 +518,7 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 1 Done: Created Folders';
 	trap - EXIT
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 2 Done: Installed WG binary'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 2 Done: Installed WG binary'; then
 	# 2nd Step: Install WireGuard binary to system
 	trap cleanUpInstall EXIT
 	installWireGuard
@@ -526,7 +526,7 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 2 Done: Installed WG bina
 	trap - EXIT
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Step 3 Done: Configured WG server'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 3 Done: Configured WG server'; then
 	# 3rd Step: Configure WireGuard server
 	trap cleanConfigureWGServer EXIT
 	configureWGServer
@@ -538,7 +538,7 @@ else
 	source "$SCRIPT_TEMP_FOLDER/.params"
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" | grep -q 'Final Step Done'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Final Step Done'; then
 	# 5th Step: Start WireGuard server
 	trap cleanstartWireGuardServer EXIT
 	startWireGuardServer
