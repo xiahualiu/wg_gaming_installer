@@ -68,6 +68,8 @@ checkOS() {
 		:
 	elif [ "$OS" = 'arch' ]; then
 		:
+	elif [ "$OS" = 'fedora' ]; then
+		:
 	else
 		echo "Your Linux distribution (${OS}) is not supported. Please use Ubuntu 20.04 or later"
 		exit 1
