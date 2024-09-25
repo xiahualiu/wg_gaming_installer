@@ -120,6 +120,16 @@ uninstallArchLinux() {
 	sudo pacman -R --noconfirm wireguard-tools qrencode
 }
 
+installFedora() {
+	sudo dnf update -y
+	sudo dnf install -y wireguard-tools nftables qrencode curl git make wget
+}
+
+uninstallFedora() {
+	sudo dnf autoremove -y wireguard-tools nftables qrencode curl git make wget
+	sudo dnf clean all -y
+}
+
 installUserspaceWG() {
 	bash <(curl -sL https://git.io/go-installer)
 	sudo ln -s "$HOME/.go/bin/go" "$GO_INSTALL_PATH"
@@ -149,6 +159,8 @@ installWireGuard() {
 		installAlmaLinux
 	elif [ "$OS" = 'arch' ]; then
 		installArchLinux
+	elif [ "$OS" = 'fedora' ]; then
+		installFedora
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then
@@ -163,6 +175,8 @@ cleanUpInstall() {
 		uninstallAlmaLinux
 	elif [ "$OS" = 'arch' ]; then
 		uninstallArchLinux
+	elif [ "$OS" = 'fedora' ]; then
+		uninstallFedora
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then
