@@ -402,6 +402,9 @@ cleanConfigureWGServer() {
 ################################################################################
 
 checkSSHport() {
+	if [ -z ${SSH_CLIENT+x} ]; then
+		return
+	fi
 	if [ "${SSH_CLIENT##* }" -eq 53 ] || [ "${SSH_CLIENT##* }" -eq 80 ] || [ "${SSH_CLIENT##* }" -eq 88 ] ||
 		[ "${SSH_CLIENT##* }" -eq 500 ] || { [ "${SSH_CLIENT##* }" -gt 1024 ] && [ "${SSH_CLIENT##* }" -le 65000 ]; }; then
 		echo -n "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
