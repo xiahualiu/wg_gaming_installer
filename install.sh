@@ -66,6 +66,8 @@ checkOS() {
 		fi
 	elif [ "$OS" = 'almalinux' ]; then
 		:
+	elif [ "$OS" = 'arch' ]; then
+		:
 	else
 		echo "Your Linux distribution (${OS}) is not supported. Please use Ubuntu 20.04 or later"
 		exit 1
@@ -110,6 +112,14 @@ uninstallAlmaLinux() {
 	sudo dnf clean all -y
 }
 
+installArchLinux() {
+	sudo pacman -S --noconfirm wireguard-tools nftables qrencode curl git make
+}
+
+uninstallArchLinux() {
+	sudo pacman -R --noconfirm wireguard-tools qrencode
+}
+
 installUserspaceWG() {
 	bash <(curl -sL https://git.io/go-installer)
 	sudo ln -s "$HOME/.go/bin/go" "$GO_INSTALL_PATH"
@@ -137,6 +147,8 @@ installWireGuard() {
 		installonDebian
 	elif [ "$OS" = 'almalinux' ]; then
 		installAlmaLinux
+	elif [ "$OS" = 'arch' ]; then
+		installArchLinux
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then
@@ -149,6 +161,8 @@ cleanUpInstall() {
 		uninstallonDebian
 	elif [ "$OS" = 'almalinux' ]; then
 		uninstallAlmaLinux
+	elif [ "$OS" = 'arch' ]; then
+		uninstallArchLinux
 	fi
 
 	if [ $USERSPACE_WG = 'true' ]; then

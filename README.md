@@ -114,6 +114,9 @@ sudo apt update && sudo apt upgrade -y
 # If you are using Fedora, AlmaLinux, etc
 sudo dnf update -y
 
+# Arch, etc.
+sudo pacman -Syu
+
 # Reboot once
 sudo reboot
 ```
