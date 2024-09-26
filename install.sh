@@ -66,6 +66,8 @@ checkOS() {
 		fi
 	elif [ "$OS" = 'almalinux' ]; then
 		:
+	elif [ "$OS" = 'rocky' ]; then
+		:
 	elif [ "$OS" = 'arch' ]; then
 		:
 	elif [ "$OS" = 'fedora' ]; then
