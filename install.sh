@@ -128,7 +128,7 @@ installFedora() {
 }
 
 uninstallFedora() {
-	sudo dnf autoremove -y wireguard-tools nftables qrencode curl git make wget
+	sudo dnf autoremove -y wireguard-tools qrencode
 	sudo dnf clean all -y
 }
 
