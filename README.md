@@ -92,6 +92,7 @@ Supported distributions:
 - Debian >= 11
 - Ubuntu >= 20.04 (*Preferred*)
 - AlmaLinux
+- RockyLinux
 - ArchLinux
 - Fedora
 
