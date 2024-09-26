@@ -66,6 +66,8 @@ checkOS() {
 		fi
 	elif [ "$OS" = 'almalinux' ]; then
 		:
+	elif [ "$OS" = 'rocky' ]; then
+		:
 	elif [ "$OS" = 'arch' ]; then
 		:
 	elif [ "$OS" = 'fedora' ]; then
@@ -110,6 +112,17 @@ installAlmaLinux() {
 }
 
 uninstallAlmaLinux() {
+	sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
+	sudo dnf clean all -y
+}
+
+installRockyLinux() {
+	sudo dnf update -y
+	sudo dnf install -y epel-release elrepo-release
+	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make wget
+}
+
+uninstallRockyLinux() {
 	sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
 	sudo dnf clean all -y
 }
@@ -159,6 +172,8 @@ installWireGuard() {
 		installonDebian
 	elif [ "$OS" = 'almalinux' ]; then
 		installAlmaLinux
+	elif [ "$OS" = 'rocky' ]; then
+		installRockyLinux
 	elif [ "$OS" = 'arch' ]; then
 		installArchLinux
 	elif [ "$OS" = 'fedora' ]; then
@@ -175,6 +190,8 @@ cleanUpInstall() {
 		uninstallonDebian
 	elif [ "$OS" = 'almalinux' ]; then
 		uninstallAlmaLinux
+	elif [ "$OS" = 'rocky' ]; then
+		uninstallRockyLinux
 	elif [ "$OS" = 'arch' ]; then
 		uninstallArchLinux
 	elif [ "$OS" = 'fedora' ]; then
