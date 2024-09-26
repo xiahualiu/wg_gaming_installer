@@ -253,8 +253,8 @@ configureWGServer() {
 		echo "Address = ${SERVER_WG_IPV4}/24,${SERVER_WG_IPV6}/64"
 		echo "ListenPort = $SERVER_PORT"
 		echo "PrivateKey = ${SERVER_PRIV_KEY}"
-		echo "PostUp = ${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-		echo "PostDown = ${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
+		echo "PostUp = ${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+		echo "PostDown = ${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 }
 
@@ -334,17 +334,17 @@ clientQuestions() {
 }
 
 createNATscripts() {
-	cp "${SCRIPT_ROOT_DIR}/templates/add-fullcone-nat.sh" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	cp "${SCRIPT_ROOT_DIR}/templates/rm-fullcone-nat.sh" "${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
+	sudo cp "${SCRIPT_ROOT_DIR}/templates/add-fullcone-nat.sh" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo cp "${SCRIPT_ROOT_DIR}/templates/rm-fullcone-nat.sh" "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
 
-	sed -i "s/\$SERVER_PUB_NIC/${SERVER_PUB_NIC}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sed -i "s/\$SERVER_PORT/${SERVER_PORT}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sed -i "s/\$SERVER_WG_NIC/${SERVER_WG_NIC}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sed -i "s/\$CLIENT_WG_IPV4/${CLIENT_WG_IPV4}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sed -i "s/\$CLIENT_WG_IPV6/${CLIENT_WG_IPV6}/g" "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "s/\$SERVER_PUB_NIC/${SERVER_PUB_NIC}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "s/\$SERVER_PORT/${SERVER_PORT}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "s/\$SERVER_WG_NIC/${SERVER_WG_NIC}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "s/\$CLIENT_WG_IPV4/${CLIENT_WG_IPV4}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "s/\$CLIENT_WG_IPV6/${CLIENT_WG_IPV6}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 
-	sudo chmod +x "${SCRIPT_TEMP_FOLDER}/add-fullcone-nat.sh"
-	sudo chmod +x "${SCRIPT_TEMP_FOLDER}/rm-fullcone-nat.sh"
+	sudo chmod +x "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo chmod +x "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
 	# Enable routing on the server
 	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
 	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
@@ -407,7 +407,7 @@ cleanConfigureWGServer() {
 	sudo rm -f "/etc/sysctl.d/wg.conf"
 	sudo sysctl --system
 	# Clean client conf
-	sudo rm -f "${SCRIPT_TEMP_FOLDER}/*.sh"
+	sudo rm -f "${WG_CONF_FOLDER}/*.sh"
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}/*.conf"
 	# Clean params
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}/.params"

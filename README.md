@@ -54,7 +54,7 @@ WireGuard does not fit your environment? Check out [openvpn-install](https://git
 
 ## Customize the forwarding ports
 
-After the installation, in `$HOME/.wireguard/add-fullcone-nat.sh` you can find:
+After the installation, in `/etc/wireguard/add-fullcone-nat.sh` you can find:
 
 ```bash
 nft add rule ip nat PREROUTING iifname $SERVER_PUB_NIC udp dport 53 counter dnat to $CLIENT_WG_IPV4:53 comment "WireGuardGamingInstaller" || true
