@@ -562,7 +562,7 @@ showWGClientConfiguration() {
 		exit 1
 	fi
 	listAllWGClients
-	read -rp "Type the client name you want to remove: " -e -i "$CLIENT_NAME" CLIENT_NAME
+	read -rp "Type the client name you want to show: " -e -i "$CLIENT_NAME" CLIENT_NAME
 	while ! grep -qE "CLIENT_NAME=$CLIENT_NAME$" "${SCRIPT_TEMP_FOLDER}/.params"; do
 		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
 	done
