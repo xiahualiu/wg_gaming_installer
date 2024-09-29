@@ -383,7 +383,10 @@ newClientQuestions() {
 		fi
 	done
 
-	read -rp "The ports you want to forward for this client, (e.g. 80,443,100-200) NO space: " -e CLIENT_FORWARD_PORTS
+	CLIENT_FORWARD_PORTS=''
+	while [[ ! "$CLIENT_FORWARD_PORTS" =~ ^[0-9]+ ]] || [[ $CLIENT_FORWARD_PORTS =~ [[:space:]] ]]; do
+		read -rp "The ports you want to forward for this client, (e.g. 80,443,100-200) NO space allowed: " -e CLIENT_FORWARD_PORTS
+	done
 }
 
 addClientWGConfEntry() {
@@ -422,8 +425,8 @@ rmClientWGConfEntry() {
 }
 
 addClientNATEntry() {
-	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC udp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" >> "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC tdp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" >> "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC udp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" >>"${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC tdp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" >>"${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
 rmClientNATEntry() {
@@ -432,7 +435,7 @@ rmClientNATEntry() {
 }
 
 addClientParam() {
-	echo "CLIENT_NAME=${CLIENT_NAME}" >> "${SCRIPT_TEMP_FOLDER}/.params"
+	echo "CLIENT_NAME=${CLIENT_NAME}" >>"${SCRIPT_TEMP_FOLDER}/.params"
 }
 
 rmClientParam() {
@@ -450,19 +453,19 @@ rmWGClientConfiguration() {
 		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
 	done
 	while true; do
-		read -rp "Do you really want to remove ${RED}${CLIENT_NAME}${NC}? [y/n]: " -e REMOVE	
+		read -rp "Do you really want to remove ${RED}${CLIENT_NAME}${NC}? [y/n]: " -e REMOVE
 		case $REMOVE in
-            [Yy]*) 
-				rmClientWGConfEntry "$CLIENT_NAME"
-				rmClientNATEntry "$CLIENT_NAME"
-				rmClientParam "$CLIENT_NAME"
-				break
-				;;  
-            [Nn]*) 
-				echo "Aborted."
-				break
-				;;
-        esac
+		[Yy]*)
+			rmClientWGConfEntry "$CLIENT_NAME"
+			rmClientNATEntry "$CLIENT_NAME"
+			rmClientParam "$CLIENT_NAME"
+			break
+			;;
+		[Nn]*)
+			echo "Aborted."
+			break
+			;;
+		esac
 	done
 }
 
@@ -515,7 +518,6 @@ cleanstartWireGuardServer() {
 	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl disable "wg-quick@${SERVER_WG_NIC}"
 }
-
 
 ################################################################################
 ############################## Miscellaneous ###################################
@@ -598,8 +600,6 @@ manageMenu() {
 		;;
 	esac
 }
-
-
 
 ################################################################################
 ############################# Script Beginning #################################
