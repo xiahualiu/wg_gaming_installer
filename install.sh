@@ -573,7 +573,7 @@ manageMenu() {
 	echo -e "   6) Exit"
 
 	MENU_OPTION=''
-	while ! echo "${MENU_OPTION}" | grep -qE '[1-4]'; do
+	while ! echo "${MENU_OPTION}" | grep -qE '[1-6]'; do
 		read -rp "Select an option [1-4]: " MENU_OPTION
 	done
 	case "${MENU_OPTION}" in
