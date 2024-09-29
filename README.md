@@ -104,10 +104,10 @@ cd ./wg_gaming_installer
 
 This script needs to run on a server with a public IP address to work.
 
-Typically the server public IP should be populated automatically. However for some cloud providers like Google Cloud Platform and Oracle Cloud, the auto-populated public IP address is NOT the correct, but instead a subnet IP address (usually starts with `10.*.*.*`).
+Typically the server public IP should be populated automatically. However for some cloud providers like Google Cloud Platform and Oracle Cloud, the auto-populated public IP address is NOT correct, but instead a subnet IP address (usually starts with `10.*.*.*`).
 
 In these cases you need to change the value to what your server's acutal public IP is.
 
-## Stop / Restart / Uninstall / List/Add/Remove a new client 
+## Stop / Restart / Uninstall / List clients / Add/Remove a client 
 
 Run the script again will give you these options!
