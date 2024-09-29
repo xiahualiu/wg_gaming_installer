@@ -259,6 +259,36 @@ serverConfQuestions() {
 		fi
 	done
 }
+
+createServerNATscripts() {
+	sudo cp "${SCRIPT_ROOT_DIR}/templates/add-fullcone-nat.sh" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo cp "${SCRIPT_ROOT_DIR}/templates/rm-fullcone-nat.sh" "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
+
+	sudo sed -i "s/\$SERVER_PUB_NIC/${SERVER_PUB_NIC}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+
+	sudo chmod +x "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo chmod +x "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
+	# Enable routing
+	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
+	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
+	sudo sysctl --system
+}
+
+storeParams() {
+	{
+		echo "# Parameters used for WireGuard server configuration."
+		echo "SERVER_PUB_IP=${SERVER_PUB_IP}"
+		echo "SERVER_PUB_NIC=$SERVER_PUB_NIC"
+		echo "SERVER_WG_NIC=$SERVER_WG_NIC"
+		echo "SERVER_WG_IPV4=${SERVER_WG_IPV4}"
+		echo "SERVER_WG_IPV6=${SERVER_WG_IPV6}"
+		echo "SERVER_PORT=$SERVER_PORT"
+		echo "CLIENT_DNS_1=${CLIENT_DNS_1}"
+		echo "CLIENT_DNS_2=${CLIENT_DNS_2}"
+		echo "SERVER_PUB_KEY=${SERVER_PUB_KEY}"
+	} >"${SCRIPT_TEMP_FOLDER}/.params"
+}
+
 configureWGServer() {
 	serverConfQuestions
 
@@ -272,10 +302,14 @@ configureWGServer() {
 		echo "PrivateKey = ${SERVER_PRIV_KEY}"
 		echo "PostUp = ${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 		echo "PostDown = ${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
+		ehoc "SaveConfig = false"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
+
+	createServerNATscripts
+	storeParams
 }
 
-clientQuestions() {
+newClientQuestions() {
 	# If server public ip is ipv6, add [] when needed
 	if echo "${SERVER_PUB_IP}" | grep -q ':'; then
 		if (! echo "${SERVER_PUB_IP}" | grep -qE '^\[') && (! echo "${SERVER_PUB_IP}" | grep -qE '\]$'); then
@@ -348,29 +382,11 @@ clientQuestions() {
 			echo ""
 		fi
 	done
+
+	read -rp "The ports you want to forward for this client, (e.g. 80,443,100-200) NO space: " -e CLIENT_FORWARD_PORTS
 }
 
-createNATscripts() {
-	sudo cp "${SCRIPT_ROOT_DIR}/templates/add-fullcone-nat.sh" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo cp "${SCRIPT_ROOT_DIR}/templates/rm-fullcone-nat.sh" "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
-
-	sudo sed -i "s/\$SERVER_PUB_NIC/${SERVER_PUB_NIC}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "s/\$SERVER_PORT/${SERVER_PORT}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "s/\$SERVER_WG_NIC/${SERVER_WG_NIC}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "s/\$CLIENT_WG_IPV4/${CLIENT_WG_IPV4}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "s/\$CLIENT_WG_IPV6/${CLIENT_WG_IPV6}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-
-	sudo chmod +x "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo chmod +x "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
-	# Enable routing on the server
-	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
-	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
-	sudo sysctl --system
-}
-
-configureWGClient() {
-	clientQuestions
-
+addClientWGConfEntry() {
 	# Generate key pair for the client
 	CLIENT_PRIV_KEY=$(wg genkey)
 	CLIENT_PUB_KEY=$(echo "${CLIENT_PRIV_KEY}" | wg pubkey)
@@ -392,30 +408,69 @@ configureWGClient() {
 
 	# Add the client as a peer to the server
 	{
-		echo ""
-		echo "[Peer]"
-		echo "PublicKey = ${CLIENT_PUB_KEY}"
-		echo "PresharedKey = ${CLIENT_PRE_SHARED_KEY}"
-		echo "AllowedIPs = $CLIENT_WG_IPV4/32,$CLIENT_WG_IPV6/128"
+		echo "# WG_CLIENT ${CLIENT_NAME}"
+		echo "[Peer] # WG_CLIENT ${CLIENT_NAME}"
+		echo "PublicKey = ${CLIENT_PUB_KEY} # WG_CLIENT ${CLIENT_NAME}"
+		echo "PresharedKey = ${CLIENT_PRE_SHARED_KEY} # WG_CLIENT ${CLIENT_NAME}"
+		echo "AllowedIPs = $CLIENT_WG_IPV4/32,$CLIENT_WG_IPV6/128 # WG_CLIENT ${CLIENT_NAME}"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
-
-	createNATscripts
 }
 
-storeParams() {
-	{
-		echo "# Parameters used for WireGuard server configuration."
-		echo "SERVER_PUB_IP=${SERVER_PUB_IP}"
-		echo "SERVER_PUB_NIC=$SERVER_PUB_NIC"
-		echo "SERVER_WG_NIC=$SERVER_WG_NIC"
-		echo "SERVER_WG_IPV4=${SERVER_WG_IPV4}"
-		echo "SERVER_WG_IPV6=${SERVER_WG_IPV6}"
-		echo "SERVER_PORT=$SERVER_PORT"
-		echo "CLIENT_DNS_1=${CLIENT_DNS_1}"
-		echo "CLIENT_DNS_2=${CLIENT_DNS_2}"
-		echo "SERVER_PUB_KEY=${SERVER_PUB_KEY}"
-		echo "CLIENT_NAME=${CLIENT_NAME}"
-	} >"${SCRIPT_TEMP_FOLDER}/.params"
+rmClientWGConfEntry() {
+	local client_name="$1"
+	sudo sed -i "s/# WG_CLIENT ${client_name}/d" "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
+}
+
+addClientNATEntry() {
+	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC udp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" >> "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC tdp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" >> "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+}
+
+rmClientNATEntry() {
+	local client_name="$1"
+	sed -i "s/Client ${client_name}/d" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+}
+
+addClientParam() {
+	echo "CLIENT_NAME=${CLIENT_NAME}" >> "${SCRIPT_TEMP_FOLDER}/.params"
+}
+
+rmClientParam() {
+	local client_name="$1"
+	sed -i "s/CLIENT_NAME=${client_name}/d" "${SCRIPT_TEMP_FOLDER}/.params"
+}
+
+rmWGClientConfiguration() {
+	if [ -z "$CLIENT_NAME" ]; then
+		echo "There is no client to remove!"
+		exit 1
+	fi
+	read -rp "Type the client name you want to delete" -e -i "$CLIENT_NAME" CLIENT_NAME
+	while ! grep -q "CLIENT_NAME=$CLIENT_NAME" "${SCRIPT_TEMP_FOLDER}/.params"; do
+		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
+	done
+	while true; do
+		read -rp "Do you really want to remove ${RED}${CLIENT_NAME}${NC}? [y/n]: " -e REMOVE	
+		case $REMOVE in
+            [Yy]*) 
+				rmClientWGConfEntry "$CLIENT_NAME"
+				rmClientNATEntry "$CLIENT_NAME"
+				rmClientParam "$CLIENT_NAME"
+				break
+				;;  
+            [Nn]*) 
+				echo "Aborted."
+				break
+				;;
+        esac
+	done
+}
+
+addWGClientConfiguration() {
+	newClientQuestions
+	addClientWGConfEntry
+	addClientNATEntry
+	addClientParam
 }
 
 cleanConfigureWGServer() {
@@ -434,18 +489,9 @@ cleanConfigureWGServer() {
 ####################### Final Step : Start WG Server ###########################
 ################################################################################
 
-checkSSHport() {
-	if [ -z ${SSH_CLIENT+x} ]; then
-		return
-	fi
-	if [ "${SSH_CLIENT##* }" -eq 53 ] || [ "${SSH_CLIENT##* }" -eq 80 ] || [ "${SSH_CLIENT##* }" -eq 88 ] ||
-		[ "${SSH_CLIENT##* }" -eq 500 ] || { [ "${SSH_CLIENT##* }" -gt 1024 ] && [ "${SSH_CLIENT##* }" -le 65000 ]; }; then
-		echo -n "BE ADVISED! SSH Port will be changed from ${SSH_CLIENT##* } to 65432!"
-		read -n1 -r
-		sudo sed -i 's/Port\s\+[0-9]\+/Port 65432/' /etc/ssh/sshd_config
-		sudo systemctl restart ssh.service || true
-		sudo systemctl restart sshd.service || true
-	fi
+showClientQRCode() {
+	qrencode -t ansiutf8 -l L <"${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
+	echo "It is also available in ${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 }
 
 startWireGuardServer() {
@@ -461,14 +507,28 @@ startWireGuardServer() {
 		echo -e "${ORANGE}If you get something like \"Cannot find device $SERVER_WG_NIC\", please reboot!${NC}"
 	else
 		echo -e "\nHere is your client config file as a QR Code:"
-		qrencode -t ansiutf8 -l L <"${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
-		echo "It is also available in ${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
+		showClientQRCode
 	fi
 }
 
 cleanstartWireGuardServer() {
 	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl disable "wg-quick@${SERVER_WG_NIC}"
+}
+
+
+################################################################################
+############################## Miscellaneous ###################################
+################################################################################
+
+restartWireGuardServer() {
+	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
+
+	if ! systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"; then
+		echo -e "${RED}WARNING: WireGuard does not seem to be running.${NC}"
+	else
+		echo "WireGuard Server restarted sucessfully."
+	fi
 }
 
 uninstallWg() {
@@ -504,10 +564,12 @@ manageMenu() {
 	echo "It looks like WireGuard is already installed."
 	echo ""
 	echo "What do you want to do?"
-	echo "   1) Stop WireGuard"
-	echo "   2) Restart WireGuard"
-	echo "   3) Uninstall WireGuard"
-	echo "   4) Exit"
+	echo -e "   1) Stop WireGuard"
+	echo -e "   2) Restart WireGuard"
+	echo -e "   3) Uninstall WireGuard"
+	echo -e "   4) ${RED}Add${NC} a WireGuard client"
+	echo -e "   5) ${RED}Remove${NC} a WireGuard client"
+	echo -e "   6) Exit"
 
 	MENU_OPTION=''
 	while ! echo "${MENU_OPTION}" | grep -qE '[1-4]'; do
@@ -524,10 +586,20 @@ manageMenu() {
 		uninstallWg
 		;;
 	4)
+		addWGClientConfiguration
+		restartWireGuardServer
+		;;
+	5)
+		rmWGClientConfiguration
+		restartWireGuardServer
+		;;
+	6)
 		exit 0
 		;;
 	esac
 }
+
+
 
 ################################################################################
 ############################# Script Beginning #################################
@@ -563,8 +635,7 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 3 Done: Confi
 	# 3rd Step: Configure WireGuard server
 	trap cleanConfigureWGServer EXIT
 	configureWGServer
-	configureWGClient
-	storeParams
+	addWGClientConfiguration
 	echo 'Step 3 Done: Configured WG server' >>"$SCRIPT_TEMP_FOLDER/.status"
 	trap - EXIT
 else
