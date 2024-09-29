@@ -422,18 +422,19 @@ addClientWGConfEntry() {
 rmClientWGConfEntry() {
 	local client_name="$1"
 	sudo sed -i "/# WG_CLIENT ${client_name}/d" "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
+	rm -f "${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 }
 
 addClientNATEntry() {
-	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_wg0client\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_wg0client\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_wg0client\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_wg0client\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
 rmClientNATEntry() {
 	local client_name="$1"
-	sed -i "/Client_${client_name}/d" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "/Client_${client_name}/d" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
 addClientParam() {
