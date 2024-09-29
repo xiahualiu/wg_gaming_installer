@@ -489,8 +489,7 @@ startWGServer() {
 		echo -e "${ORANGE}You can check if WireGuard is running with: systemctl status wg-quick@$SERVER_WG_NIC${NC}"
 		echo -e "${ORANGE}If you get something like \"Cannot find device $SERVER_WG_NIC\", please reboot!${NC}"
 	else
-		echo -e "\nHere is your client config file as a QR Code:"
-		showClientQRCode
+		echo -e "WireGuard server started sucessfully."
 	fi
 }
 
