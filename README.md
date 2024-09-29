@@ -3,14 +3,12 @@
 
 **Thank you for all the stars!**
 
-**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports multiple WireGuard clients now!**
-
-If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
+**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports multiple WireGuard peers now!**
 
 ## Update Logs
 
 - 09/29/2024 Major update.
-    - Added multi-client support.
+    - Added multi-peer support.
 
 - 09/23/2024 Major update.
     - Added support for OpenVZ, LXC by installing wireguard-go.
