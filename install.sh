@@ -622,7 +622,7 @@ manageMenu() {
 		;;
 	6)
 		rmWGClientConfiguration
-		restartWireGuardServer()
+		restartWireGuardServer
 		;;
 	7)
 		exit 0
