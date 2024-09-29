@@ -459,15 +459,7 @@ rmWGClientConfiguration() {
 		echo "There is no client to remove!"
 		exit 1
 	fi
-	echo "Current WireGuard client(s):"
-	echo ""
-	while read -r line; do
-		if [[ $line =~ ^'CLIENT_NAME=' ]]; then
-			line=${line##CLIENT_NAME=}
-			echo "* $line"
-		fi
-	done < "${SCRIPT_TEMP_FOLDER}/.params"
-	echo ""
+	listAllWGClients
 	read -rp "Type the client name you want to remove: " -e -i "$CLIENT_NAME" CLIENT_NAME
 	while ! grep -qE "CLIENT_NAME=$CLIENT_NAME$" "${SCRIPT_TEMP_FOLDER}/.params"; do
 		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
@@ -551,6 +543,18 @@ restartWireGuardServer() {
 	fi
 }
 
+listAllWGClients() {
+	echo "Current WireGuard client(s):"
+	echo ""
+	while read -r line; do
+		if [[ $line =~ ^'CLIENT_NAME=' ]]; then
+			line=${line##CLIENT_NAME=}
+			echo "* $line"
+		fi
+	done < "${SCRIPT_TEMP_FOLDER}/.params"
+	echo ""
+}
+
 uninstallWg() {
 	echo ""
 	echo -e "\n${RED}WARNING: This will uninstall WireGuard and remove all the configuration files!${NC}"
@@ -587,13 +591,14 @@ manageMenu() {
 	echo -e "   1) Stop WireGuard"
 	echo -e "   2) Restart WireGuard"
 	echo -e "   3) Uninstall WireGuard"
-	echo -e "   4) ${RED}Add${NC} a WireGuard client"
-	echo -e "   5) ${RED}Remove${NC} a WireGuard client"
-	echo -e "   6) Exit"
+	echo -e "   4) List all WireGuard clients"
+	echo -e "   5) ${RED}Add${NC} a WireGuard client"
+	echo -e "   6) ${RED}Remove${NC} a WireGuard client"
+	echo -e "   7) Exit"
 
 	MENU_OPTION=''
-	while ! echo "${MENU_OPTION}" | grep -qE '[1-6]'; do
-		read -rp "Select an option [1-4]: " MENU_OPTION
+	while ! echo "${MENU_OPTION}" | grep -qE '[1-7]'; do
+		read -rp "Select an option [1-7]: " MENU_OPTION
 	done
 	case "${MENU_OPTION}" in
 	1)
@@ -606,16 +611,19 @@ manageMenu() {
 		uninstallWg
 		;;
 	4)
+		listAllWGClients
+		;;
+	5)
 		addWGClientConfiguration
 		trap cleanWGClientConfiguration EXIT
 		restartWireGuardServer
 		showClientQRCode
 		trap - EXIT
 		;;
-	5)
+	6)
 		rmWGClientConfiguration
 		;;
-	6)
+	7)
 		exit 0
 		;;
 	esac
