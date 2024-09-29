@@ -325,7 +325,7 @@ newClientQuestions() {
 	echo "The client name must consist of alphanumeric character(s). It may also include underscores or dashes and can't exceed 15 chars."
 
 	CLIENT_NAME=''
-	while ! echo "$CLIENT_NAME" | grep -qE '^[a-zA-Z0-9_]+$' || [ ${#CLIENT_NAME} -gt 16 ]; do
+	while ! echo "$CLIENT_NAME" | grep -qE '^[a-zA-Z0-9_]+$' || [ ${#CLIENT_NAME} -gt 16 ] || grep -q "${CLIENT_NAME}" "${SCRIPT_TEMP_FOLDER}/.params"; do
 		read -rp "Client name: " -e -i 'wg0client' CLIENT_NAME
 	done
 
@@ -421,7 +421,7 @@ addClientWGConfEntry() {
 
 rmClientWGConfEntry() {
 	local client_name="$1"
-	sudo sed -i "s/# WG_CLIENT ${client_name}/d" "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
+	sudo sed -i "/# WG_CLIENT ${client_name}/d" "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 }
 
 addClientNATEntry() {
@@ -433,7 +433,7 @@ addClientNATEntry() {
 
 rmClientNATEntry() {
 	local client_name="$1"
-	sed -i "s/Client_${client_name}/d" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sed -i "/Client_${client_name}/d" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
 addClientParam() {
@@ -442,7 +442,7 @@ addClientParam() {
 
 rmClientParam() {
 	local client_name="$1"
-	sed -i "s/CLIENT_NAME=${client_name}/d" "${SCRIPT_TEMP_FOLDER}/.params"
+	sed -i "/CLIENT_NAME=${client_name}/d" "${SCRIPT_TEMP_FOLDER}/.params"
 }
 
 rmWGClientConfiguration() {
@@ -450,12 +450,13 @@ rmWGClientConfiguration() {
 		echo "There is no client to remove!"
 		exit 1
 	fi
-	read -rp "Type the client name you want to delete" -e -i "$CLIENT_NAME" CLIENT_NAME
+	read -rp "Type the client name you want to remove: " -e -i "$CLIENT_NAME" CLIENT_NAME
 	while ! grep -q "CLIENT_NAME=$CLIENT_NAME" "${SCRIPT_TEMP_FOLDER}/.params"; do
 		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
 	done
 	while true; do
-		read -rp "Do you really want to remove ${RED}${CLIENT_NAME}${NC}? [y/n]: " -e REMOVE
+		echo -e "Do you really want to remove ${RED}${CLIENT_NAME}${NC}?"
+		read -rp "[y/n]: " -e REMOVE
 		case $REMOVE in
 		[Yy]*)
 			rmClientWGConfEntry "$CLIENT_NAME"
