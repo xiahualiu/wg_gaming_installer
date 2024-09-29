@@ -1,6 +1,6 @@
 #!/usr/sbin/nft -f
 
-nft flush ruleset
+flush ruleset
 
 table inet filter {
     chain INPUT {
