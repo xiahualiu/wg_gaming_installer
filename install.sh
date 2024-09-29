@@ -425,8 +425,8 @@ rmClientWGConfEntry() {
 }
 
 addClientNATEntry() {
-	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC udp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" | sudo tee -a "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC tdp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" | sudo tee -a "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	echo "nft add rule inet nat PREROUTING iifname $SERVER_PUB_NIC udp dport {$CLIENT_FORWARD_PORTS} dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" | sudo tee -a "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	echo "nft add rule inet nat PREROUTING iifname $SERVER_PUB_NIC tdp dport {$CLIENT_FORWARD_PORTS} dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" | sudo tee -a "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
 rmClientNATEntry() {
