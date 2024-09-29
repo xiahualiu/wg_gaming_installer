@@ -166,7 +166,7 @@ uninstallUserspaceWG() {
 	fi
 }
 
-installWireGuard() {
+installWG() {
 	# Install WireGuard tools and module
 	if [ "$OS" = 'ubuntu' ] || [ "$OS" = 'debian' ]; then
 		installonDebian
@@ -274,7 +274,7 @@ createServerNATscripts() {
 	sudo sysctl --system
 }
 
-storeParams() {
+storeServerParams() {
 	{
 		echo "# Parameters used for WireGuard server configuration."
 		echo "SERVER_PUB_IP=${SERVER_PUB_IP}"
@@ -306,7 +306,7 @@ configureWGServer() {
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 
 	createServerNATscripts
-	storeParams
+	storeServerParams
 }
 
 newClientQuestions() {
@@ -454,7 +454,6 @@ cleanWGClientConfiguration() {
 	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
 }
 
-
 addWGClientConfiguration() {
 	newClientQuestions
 	addClientWGConfEntry
@@ -478,7 +477,7 @@ cleanConfigureWGServer() {
 ####################### Final Step : Start WG Server ###########################
 ################################################################################
 
-startWireGuardServer() {
+startWGServer() {
 	sudo systemctl start "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl enable "wg-quick@${SERVER_WG_NIC}"
 
@@ -492,7 +491,7 @@ startWireGuardServer() {
 	fi
 }
 
-cleanstartWireGuardServer() {
+cleanstartWGServer() {
 	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl disable "wg-quick@${SERVER_WG_NIC}"
 }
@@ -501,7 +500,7 @@ cleanstartWireGuardServer() {
 ############################## Miscellaneous ###################################
 ################################################################################
 
-restartWireGuardServer() {
+restartWGServer() {
 	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
 
 	if ! systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"; then
@@ -524,7 +523,7 @@ listAllWGClients() {
 			line=${line##CLIENT_NAME=}
 			echo "* $line"
 		fi
-	done < "${SCRIPT_TEMP_FOLDER}/.params"
+	done <"${SCRIPT_TEMP_FOLDER}/.params"
 	echo ""
 }
 
@@ -576,7 +575,7 @@ uninstallWg() {
 	read -rp "Do you really want to remove WireGuard? [y/n]: " -e REMOVE
 	REMOVE=${REMOVE:-n}
 	if [ "$REMOVE" = 'y' ]; then
-		cleanstartWireGuardServer
+		cleanstartWGServer
 		cleanConfigureWGServer
 		cleanUpInstall
 		deleteFolders
@@ -631,13 +630,13 @@ manageMenu() {
 	5)
 		addWGClientConfiguration
 		trap cleanWGClientConfiguration EXIT
-		restartWireGuardServer
+		restartWGServer
 		showClientQRCode
 		trap - EXIT
 		;;
 	6)
 		rmWGClientConfiguration
-		restartWireGuardServer
+		restartWGServer
 		;;
 	7)
 		showWGClientConfiguration
@@ -673,7 +672,7 @@ fi
 if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 2 Done: Installed WG binary'; then
 	# 2nd Step: Install WireGuard binary to system
 	trap cleanUpInstall EXIT
-	installWireGuard
+	installWG
 	echo 'Step 2 Done: Installed WG binary' >>"$SCRIPT_TEMP_FOLDER/.status"
 	trap - EXIT
 fi
@@ -682,7 +681,6 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 3 Done: Confi
 	# 3rd Step: Configure WireGuard server
 	trap cleanConfigureWGServer EXIT
 	configureWGServer
-	addWGClientConfiguration
 	echo 'Step 3 Done: Configured WG server' >>"$SCRIPT_TEMP_FOLDER/.status"
 	trap - EXIT
 else
@@ -691,8 +689,15 @@ fi
 
 if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Final Step Done'; then
 	# 5th Step: Start WireGuard server
-	trap cleanstartWireGuardServer EXIT
-	startWireGuardServer
+	trap cleanstartWGServer EXIT
+	startWGServer
 	echo 'Final Step Done' >>"$SCRIPT_TEMP_FOLDER/.status"
 	trap - EXIT
 fi
+
+# If first install, add a new client after the server is installed
+addWGClientConfiguration
+trap cleanWGClientConfiguration EXIT
+restartWGServer
+showClientQRCode
+trap - EXIT
