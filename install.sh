@@ -498,9 +498,6 @@ showClientQRCode() {
 }
 
 startWireGuardServer() {
-	# Check and move SSH port before starting WG
-	checkSSHport
-
 	sudo systemctl start "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl enable "wg-quick@${SERVER_WG_NIC}"
 
