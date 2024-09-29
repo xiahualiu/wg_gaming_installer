@@ -446,6 +446,13 @@ rmClientParam() {
 	sed -i "/CLIENT_NAME=${client_name}/d" "${SCRIPT_TEMP_FOLDER}/.params"
 }
 
+cleanWGClientConfiguration() {
+	rmClientWGConfEntry "$CLIENT_NAME"
+	rmClientNATEntry "$CLIENT_NAME"
+	rmClientParam "$CLIENT_NAME"
+	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
+}
+
 rmWGClientConfiguration() {
 	if [ -z "$CLIENT_NAME" ]; then
 		echo "There is no client to remove!"
@@ -460,9 +467,7 @@ rmWGClientConfiguration() {
 		read -rp "[y/n]: " -e REMOVE
 		case $REMOVE in
 		[Yy]*)
-			rmClientWGConfEntry "$CLIENT_NAME"
-			rmClientNATEntry "$CLIENT_NAME"
-			rmClientParam "$CLIENT_NAME"
+			rmWGClientConfiguration
 			break
 			;;
 		[Nn]*)
@@ -590,8 +595,10 @@ manageMenu() {
 		;;
 	4)
 		addWGClientConfiguration
+		trap cleanWGClientConfiguration EXIT
 		restartWireGuardServer
 		showClientQRCode
+		trap - EXIT
 		;;
 	5)
 		rmWGClientConfiguration
