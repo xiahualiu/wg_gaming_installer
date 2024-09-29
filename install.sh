@@ -455,7 +455,7 @@ cleanWGClientConfiguration() {
 }
 
 rmWGClientConfiguration() {
-	if [ -z "$CLIENT_NAME" ]; then
+	if [ -z "${CLIENT_NAME:=}" ]; then
 		echo "There is no client to remove!"
 		exit 1
 	fi
@@ -467,7 +467,7 @@ rmWGClientConfiguration() {
 		fi
 	done < "${SCRIPT_TEMP_FOLDER}/.params"
 	read -rp "Type the client name you want to remove: " -e -i "$CLIENT_NAME" CLIENT_NAME
-	while ! grep -q "CLIENT_NAME=$CLIENT_NAME" "${SCRIPT_TEMP_FOLDER}/.params"; do
+	while ! grep -qE "CLIENT_NAME=$CLIENT_NAME$" "${SCRIPT_TEMP_FOLDER}/.params"; do
 		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
 	done
 	while true; do
@@ -475,7 +475,7 @@ rmWGClientConfiguration() {
 		read -rp "[y/n]: " -e REMOVE
 		case $REMOVE in
 		[Yy]*)
-			rmWGClientConfiguration
+			cleanWGClientConfiguration
 			break
 			;;
 		[Nn]*)
@@ -610,7 +610,6 @@ manageMenu() {
 		;;
 	5)
 		rmWGClientConfiguration
-		restartWireGuardServer
 		;;
 	6)
 		exit 0
