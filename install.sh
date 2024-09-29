@@ -302,7 +302,7 @@ configureWGServer() {
 		echo "PrivateKey = ${SERVER_PRIV_KEY}"
 		echo "PostUp = ${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 		echo "PostDown = ${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
-		ehoc "SaveConfig = false"
+		echo "SaveConfig = false"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 
 	createServerNATscripts
