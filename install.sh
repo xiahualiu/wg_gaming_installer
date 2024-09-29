@@ -454,33 +454,6 @@ cleanWGClientConfiguration() {
 	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
 }
 
-rmWGClientConfiguration() {
-	if [ -z "${CLIENT_NAME:=}" ]; then
-		echo "There is no client to remove!"
-		exit 1
-	fi
-	listAllWGClients
-	read -rp "Type the client name you want to remove: " -e -i "$CLIENT_NAME" CLIENT_NAME
-	while ! grep -qE "CLIENT_NAME=$CLIENT_NAME$" "${SCRIPT_TEMP_FOLDER}/.params"; do
-		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
-	done
-	while true; do
-		echo -e "Do you really want to remove ${RED}${CLIENT_NAME}${NC}?"
-		read -rp "[y/n]: " -e REMOVE
-		case $REMOVE in
-		[Yy]*)
-			rmClientWGConfEntry "$CLIENT_NAME"
-			rmClientNATEntry "$CLIENT_NAME"
-			rmClientParam "$CLIENT_NAME"
-			break
-			;;
-		[Nn]*)
-			echo "Aborted."
-			break
-			;;
-		esac
-	done
-}
 
 addWGClientConfiguration() {
 	newClientQuestions
@@ -504,11 +477,6 @@ cleanConfigureWGServer() {
 ################################################################################
 ####################### Final Step : Start WG Server ###########################
 ################################################################################
-
-showClientQRCode() {
-	qrencode -t ansiutf8 -l L <"${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
-	echo "It is also available in ${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
-}
 
 startWireGuardServer() {
 	sudo systemctl start "wg-quick@${SERVER_WG_NIC}"
@@ -543,6 +511,11 @@ restartWireGuardServer() {
 	fi
 }
 
+showClientQRCode() {
+	qrencode -t ansiutf8 -l L <"${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
+	echo "It is also available in ${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
+}
+
 listAllWGClients() {
 	echo "Current WireGuard client(s):"
 	echo ""
@@ -553,6 +526,47 @@ listAllWGClients() {
 		fi
 	done < "${SCRIPT_TEMP_FOLDER}/.params"
 	echo ""
+}
+
+rmWGClientConfiguration() {
+	if [ -z "${CLIENT_NAME:=}" ]; then
+		echo "There is no client to remove!"
+		exit 1
+	fi
+	listAllWGClients
+	read -rp "Type the client name you want to remove: " -e -i "$CLIENT_NAME" CLIENT_NAME
+	while ! grep -qE "CLIENT_NAME=$CLIENT_NAME$" "${SCRIPT_TEMP_FOLDER}/.params"; do
+		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
+	done
+	while true; do
+		echo -e "Do you really want to remove ${RED}${CLIENT_NAME}${NC}?"
+		read -rp "[y/n]: " -e REMOVE
+		case $REMOVE in
+		[Yy]*)
+			rmClientWGConfEntry "$CLIENT_NAME"
+			rmClientNATEntry "$CLIENT_NAME"
+			rmClientParam "$CLIENT_NAME"
+			break
+			;;
+		[Nn]*)
+			echo "Aborted."
+			break
+			;;
+		esac
+	done
+}
+
+showWGClientConfiguration() {
+	if [ -z "${CLIENT_NAME:=}" ]; then
+		echo "There is no client to show!"
+		exit 1
+	fi
+	listAllWGClients
+	read -rp "Type the client name you want to remove: " -e -i "$CLIENT_NAME" CLIENT_NAME
+	while ! grep -qE "CLIENT_NAME=$CLIENT_NAME$" "${SCRIPT_TEMP_FOLDER}/.params"; do
+		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
+	done
+	showClientQRCode
 }
 
 uninstallWg() {
@@ -594,10 +608,11 @@ manageMenu() {
 	echo -e "   4) List all WireGuard clients"
 	echo -e "   5) ${RED}Add${NC} a WireGuard client"
 	echo -e "   6) ${RED}Remove${NC} a WireGuard client"
-	echo -e "   7) Exit"
+	echo -e "   7) Show QR code of a WireGuard client"
+	echo -e "   8) Exit"
 
 	MENU_OPTION=''
-	while ! echo "${MENU_OPTION}" | grep -qE '[1-7]'; do
+	while ! echo "${MENU_OPTION}" | grep -qE '[1-8]'; do
 		read -rp "Select an option [1-7]: " MENU_OPTION
 	done
 	case "${MENU_OPTION}" in
@@ -625,6 +640,9 @@ manageMenu() {
 		restartWireGuardServer
 		;;
 	7)
+		showWGClientConfiguration
+		;;
+	8)
 		exit 0
 		;;
 	esac
