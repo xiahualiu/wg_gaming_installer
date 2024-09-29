@@ -325,7 +325,7 @@ newClientQuestions() {
 	echo "The client name must consist of alphanumeric character(s). It may also include underscores or dashes and can't exceed 15 chars."
 
 	CLIENT_NAME=''
-	while ! echo "$CLIENT_NAME" | grep -qE '^[a-zA-Z0-9_]+$' || [ ${#CLIENT_NAME} -gt 16 ] || grep -q "${CLIENT_NAME}" "${SCRIPT_TEMP_FOLDER}/.params"; do
+	while ! echo "$CLIENT_NAME" | grep -qE '^[a-zA-Z0-9_]+$' || [ ${#CLIENT_NAME} -gt 16 ] || grep -qE "CLIENT_NAME=${CLIENT_NAME}$" "${SCRIPT_TEMP_FOLDER}/.params"; do
 		read -rp "Client name: " -e -i 'wg0client' CLIENT_NAME
 	done
 
