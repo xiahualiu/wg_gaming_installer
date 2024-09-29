@@ -475,7 +475,9 @@ rmWGClientConfiguration() {
 		read -rp "[y/n]: " -e REMOVE
 		case $REMOVE in
 		[Yy]*)
-			cleanWGClientConfiguration
+			rmClientWGConfEntry "$CLIENT_NAME"
+			rmClientNATEntry "$CLIENT_NAME"
+			rmClientParam "$CLIENT_NAME"
 			break
 			;;
 		[Nn]*)
