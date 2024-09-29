@@ -462,6 +462,9 @@ addWGClientConfiguration() {
 }
 
 cleanConfigureWGServer() {
+	SERVER_WG_NIC=${SERVER_WG_NIC:=}
+	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}" 2>/dev/null || true
+	sudo systemctl disable "wg-quick@${SERVER_WG_NIC}" 2>/dev/null || true
 	# Clean server conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.conf
 	sudo rm -f "/etc/sysctl.d/wg.conf"
@@ -489,11 +492,6 @@ startWGServer() {
 		echo -e "\nHere is your client config file as a QR Code:"
 		showClientQRCode
 	fi
-}
-
-cleanstartWGServer() {
-	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}"
-	sudo systemctl disable "wg-quick@${SERVER_WG_NIC}"
 }
 
 ################################################################################
@@ -575,7 +573,6 @@ uninstallWg() {
 	read -rp "Do you really want to remove WireGuard? [y/n]: " -e REMOVE
 	REMOVE=${REMOVE:-n}
 	if [ "$REMOVE" = 'y' ]; then
-		cleanstartWGServer
 		cleanConfigureWGServer
 		cleanUpInstall
 		deleteFolders
@@ -677,19 +674,10 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 2 Done: Insta
 	trap - EXIT
 fi
 
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Step 3 Done: Configured WG server'; then
+if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Final Step Done'; then
 	# 3rd Step: Configure WireGuard server
 	trap cleanConfigureWGServer EXIT
 	configureWGServer
-	echo 'Step 3 Done: Configured WG server' >>"$SCRIPT_TEMP_FOLDER/.status"
-	trap - EXIT
-else
-	source "$SCRIPT_TEMP_FOLDER/.params"
-fi
-
-if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Final Step Done'; then
-	# 5th Step: Start WireGuard server
-	trap cleanstartWGServer EXIT
 	startWGServer
 	echo 'Final Step Done' >>"$SCRIPT_TEMP_FOLDER/.status"
 	trap - EXIT
