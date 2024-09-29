@@ -447,6 +447,7 @@ rmClientParam() {
 }
 
 cleanWGClientConfiguration() {
+	echo "There were errors adding this new WireGuard client, please try again."
 	rmClientWGConfEntry "$CLIENT_NAME"
 	rmClientNATEntry "$CLIENT_NAME"
 	rmClientParam "$CLIENT_NAME"
