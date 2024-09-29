@@ -516,10 +516,11 @@ listAllWGClients() {
 	echo "Current WireGuard clients (<client_name> [forward_ports]):"
 	echo ""
 	local line=''
+	local port=''
 	while read -r line; do
 		if [[ $line =~ ^'CLIENT_NAME=' ]]; then
 			line=${line##CLIENT_NAME=}
-			local port=$(grep -oE "dport {.+} dnat.+${line}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1)
+			port=$(grep -oE "dport {.+} dnat.+${line}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1)
 			port=$(echo "$port" | cut -d '{' -f '2' | cut -d '}' -f '1')
 			echo "* $line [$port]"
 		fi
