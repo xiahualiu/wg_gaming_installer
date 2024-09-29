@@ -384,7 +384,7 @@ newClientQuestions() {
 	done
 
 	CLIENT_FORWARD_PORTS=''
-	while [[ ! "$CLIENT_FORWARD_PORTS" =~ ^[0-9]+ ]] || [[ $CLIENT_FORWARD_PORTS =~ [[:space:]] ]]; do
+	while [[ ! "$CLIENT_FORWARD_PORTS" =~ ^[0-9]+ ]] || [[ "$CLIENT_FORWARD_PORTS" =~ [[:space:]] ]]; do
 		read -rp "The ports you want to forward for this client, (e.g. 80,443,100-200) NO space allowed: " -e CLIENT_FORWARD_PORTS
 	done
 }
