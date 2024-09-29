@@ -434,7 +434,7 @@ addClientNATEntry() {
 
 rmClientNATEntry() {
 	local client_name="$1"
-	sudo sed -i "/Client_${client_name}/d" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "/Client_${client_name}\"/d" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
 addClientParam() {
@@ -443,7 +443,7 @@ addClientParam() {
 
 rmClientParam() {
 	local client_name="$1"
-	sed -i "/CLIENT_NAME=${client_name}/d" "${SCRIPT_TEMP_FOLDER}/.params"
+	sed -i "/CLIENT_NAME=${client_name}$/d" "${SCRIPT_TEMP_FOLDER}/.params"
 }
 
 cleanWGClientConfiguration() {
