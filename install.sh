@@ -515,10 +515,13 @@ showClientQRCode() {
 listAllWGClients() {
 	echo "Current WireGuard client(s):"
 	echo ""
+	local line=''
 	while read -r line; do
 		if [[ $line =~ ^'CLIENT_NAME=' ]]; then
 			line=${line##CLIENT_NAME=}
-			echo "* $line"
+			local port=$(grep -oE "dport {.+} dnat.+${line}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1)
+			port=$(echo "$port" | cut -d '{' -f '2' | cut -d '}' -f '1')
+			echo "* $line [$port]"
 		fi
 	done <"${SCRIPT_TEMP_FOLDER}/.params"
 	echo ""
