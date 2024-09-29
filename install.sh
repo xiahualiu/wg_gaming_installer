@@ -425,8 +425,8 @@ rmClientWGConfEntry() {
 }
 
 addClientNATEntry() {
-	sudo echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC udp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" >>"${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC tdp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" >>"${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC udp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" | sudo tee -a "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	echo "add rule inet nat PREROUTING iifname $SERVER_PUB_NIC tdp dport {$CLIENT_FORWARD_PORTS} counter dnat to $CLIENT_WG_IPV4:{$CLIENT_FORWARD_PORTS} comment \"WireGuardGamingInstaller Client ${CLIENT_NAME}\"" | sudo tee -a "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
 rmClientNATEntry() {
@@ -478,12 +478,12 @@ addWGClientConfiguration() {
 
 cleanConfigureWGServer() {
 	# Clean server conf
-	sudo rm -f "${WG_CONF_FOLDER}/*.conf"
+	sudo rm -f "${WG_CONF_FOLDER}"/*.conf
 	sudo rm -f "/etc/sysctl.d/wg.conf"
 	sudo sysctl --system
 	# Clean client conf
-	sudo rm -f "${WG_CONF_FOLDER}/*.sh"
-	sudo rm -f "${SCRIPT_TEMP_FOLDER}/*.conf"
+	sudo rm -f "${WG_CONF_FOLDER}"/*.sh
+	sudo rm -f "${SCRIPT_TEMP_FOLDER}"/*.conf
 	# Clean params
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}/.params"
 }
