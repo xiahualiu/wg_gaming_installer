@@ -459,6 +459,13 @@ rmWGClientConfiguration() {
 		echo "There is no client to remove!"
 		exit 1
 	fi
+	echo "Current WireGuard client(s):"
+	while read -r line; do
+		if [[ $line =~ ^'CLIENT_NAME=' ]]; then
+			line=${line##CLIENT_NAME=}
+			echo "* $line"
+		fi
+	done < "${SCRIPT_TEMP_FOLDER}/.params"
 	read -rp "Type the client name you want to remove: " -e -i "$CLIENT_NAME" CLIENT_NAME
 	while ! grep -q "CLIENT_NAME=$CLIENT_NAME" "${SCRIPT_TEMP_FOLDER}/.params"; do
 		read -rp "The client is not found. Please retry: " -e -i "$CLIENT_NAME" CLIENT_NAME
