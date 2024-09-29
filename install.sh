@@ -513,7 +513,7 @@ showClientQRCode() {
 }
 
 listAllWGClients() {
-	echo "Current WireGuard client(s):"
+	echo "Current WireGuard clients (<client_name> [forward_ports]):"
 	echo ""
 	local line=''
 	while read -r line; do
