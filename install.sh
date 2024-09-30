@@ -426,10 +426,12 @@ rmClientWGConfEntry() {
 }
 
 addClientNATEntry() {
-	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	sudo sed -i "23i\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	local line_n
+	line_n=$(grep -n "type nat hook prerouting" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | cut -d ':' -f '1')
+	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
 rmClientNATEntry() {
