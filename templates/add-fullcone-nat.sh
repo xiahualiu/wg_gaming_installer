@@ -12,7 +12,7 @@ table inet filter {
     }
 }
 
-table inet nat {
+table ip nat {
     chain POSTROUTING {
         type nat hook postrouting priority srcnat; policy accept;
         oifname "$SERVER_PUB_NIC" counter masquerade comment "WireGuardGamingInstaller"
@@ -20,5 +20,18 @@ table inet nat {
 
     chain PREROUTING {
         type nat hook prerouting priority dstnat; policy accept;
+        # WG_Installer_IP_Rule_Starts (Do not remove)
+    }
+}
+
+table ip6 nat {
+    chain POSTROUTING {
+        type nat hook postrouting priority srcnat; policy accept;
+        oifname "$SERVER_PUB_NIC" counter masquerade comment "WireGuardGamingInstaller"
+    }
+
+    chain PREROUTING {
+        type nat hook prerouting priority dstnat; policy accept;
+        # WG_Installer_IP6_Rule_Starts (Do not remove)
     }
 }
