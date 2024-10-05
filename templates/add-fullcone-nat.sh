@@ -5,10 +5,20 @@ flush ruleset
 table inet filter {
     chain INPUT {
         type filter hook input priority filter; policy accept;
+        # You can change default policy to drop and add your own rules for INPUT
+        # For example:
+        # - tcp dport {ssh,http} accept # Allow SSH HTTP etc.
+        # - udp dport <wg_udp_port> accept # Allow WG public port
+        # - ct state vmap { invalid : drop, established : accept, related : accept } # Allow ESTABLISHED, RELATED state
+        # - iifname "lo" accept # Allow packets sent from lo
+        #
+        # You need to make sure these rules are added before running the install script.
     }
 
     chain FORWARD {
-        type filter hook forward priority filter; policy accept;
+        type filter hook forward priority filter; policy drop;
+        iifname "$SERVER_PUB_NIC" oifname "$SERVER_WG_NIC" accept
+        iifname "$SERVER_WG_NIC" oifname "$SERVER_PUB_NIC" accept
     }
 }
 

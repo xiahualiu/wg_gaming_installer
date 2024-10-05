@@ -265,6 +265,7 @@ createServerNATscripts() {
 	sudo cp "${SCRIPT_ROOT_DIR}/templates/rm-fullcone-nat.sh" "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
 
 	sudo sed -i "s/\$SERVER_PUB_NIC/${SERVER_PUB_NIC}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
+	sudo sed -i "s/\$SERVER_WG_NIC/${SERVER_WG_NIC}/g" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 
 	sudo chmod +x "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 	sudo chmod +x "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
