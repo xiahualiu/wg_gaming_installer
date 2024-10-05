@@ -47,6 +47,10 @@ The script **Port Forwards** the client ports to the corresponding ports on the 
 
 The script supports both IPv4 and IPv6.
 
+### Customize preset `nftables` rules
+
+You can customize the nftables rules by editing the `add-fullcone-nat.sh` file **BEFORE** running the installer script.
+
 ## Requirements
 
 Supported distributions:
