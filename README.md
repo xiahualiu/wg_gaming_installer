@@ -112,6 +112,20 @@ Typically the server public IP should be populated automatically. However for so
 
 In these cases you need to change the value to what your server's acutal public IP is.
 
+## `ip_local_reserved_ports` problem
+
+You can read [my blog post](https://xiahua.pages.dev/wg-route-nat/#reserve-dnat-ports) to know more about why this script needs to reserve the peer's forward ports on the server.
+
+For most KVM instance with newer kernel, the `net.ipv4.ip_local_reserved_ports` paramemter is available, and the script will automatically reserve the forwarded ports inside the system. However for some old system, such as 'OpenVZ' 'LXC' instances, this paramter may not be available. The installer script will print error information in this case.
+
+If you see such kind of errors, please make sure that the forward ports are NOT in the **Ephemeral Port Range** of your system, ports in this range is used by the system for establishing outgoing connections.
+
+You can check the ephemeral port range by:
+
+```bash
+sysctl net.ipv4.ip_local_port_range
+```
+
 ## Stop / Restart / Uninstall / List clients / Add/Remove a client 
 
 Run the script again will give you these options!
