@@ -273,6 +273,9 @@ createServerNATscripts() {
 	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
 	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
 	# Reserve WireGuard port
+	if ! ls '/proc/sys/net/ipv4/ip_local_reserved_ports';then
+		sudo touch '/proc/sys/net/ipv4/ip_local_reserved_ports'
+	fi
 	echo "net.ipv4.ip_local_reserved_ports = ${SERVER_PORT}" | sudo tee -a "/etc/sysctl.d/wg.conf"
 	sudo sysctl -p '/etc/sysctl.d/wg.conf'
 }
