@@ -272,7 +272,13 @@ createServerNATscripts() {
 	# Enable routing
 	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
 	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
-	sudo sysctl --system
+	# Reserve WireGuard port
+	if ls '/proc/sys/net/ipv4/ip_local_reserved_ports' 2>'/dev/null'; then
+		echo "net.ipv4.ip_local_reserved_ports = ${SERVER_PORT}" | sudo tee -a "/etc/sysctl.d/wg.conf"
+		sudo sysctl -p '/etc/sysctl.d/wg.conf'
+	else
+		echo -e "${RED}Error setting reserved ports for WireGuard!${NC} Check if ip_local_reserved_ports parameter is available on your system."
+	fi
 }
 
 storeServerParams() {
@@ -418,11 +424,35 @@ addClientWGConfEntry() {
 		echo "PresharedKey = ${CLIENT_PRE_SHARED_KEY} # WG_CLIENT ${CLIENT_NAME}"
 		echo "AllowedIPs = $CLIENT_WG_IPV4/32,$CLIENT_WG_IPV6/128 # WG_CLIENT ${CLIENT_NAME}"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
+
+	# Add client forward ports to reserved ports
+	if ls '/proc/sys/net/ipv4/ip_local_reserved_ports' 2>'/dev/null'; then
+		local current_ports
+		current_ports=$(sudo grep "net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f '2')
+		current_ports="$current_ports,$CLIENT_FORWARD_PORTS"
+		sudo sed -i "s/^net.ipv4.ip_local_reserved_ports.*$/net.ipv4.ip_local_reserved_ports =${current_ports}/" "/etc/sysctl.d/wg.conf"
+	else
+		echo -e "${RED}Error setting reserved ports for WireGuard peer!${NC} Check if ip_local_reserved_ports parameter is available on your system."
+	fi
 }
 
 rmClientWGConfEntry() {
 	local client_name="$1"
 	sudo sed -i "/# WG_CLIENT ${client_name}/d" "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
+	# Find forward ports on the NAT entry
+	if ls '/proc/sys/net/ipv4/ip_local_reserved_ports' 2>'/dev/null'; then
+		local forward_ports
+		forward_ports=$(sudo grep -o "dport.*Client_${client_name}\"$" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1 | cut -d ' ' -f '2')
+		forward_ports=${forward_ports##\{}
+		forward_ports=${forward_ports%%\}}
+		# Remove this forward ports from reserved ports
+		if [ -n "$forward_ports" ]; then
+			sudo sed -i "s/,$forward_ports//" "/etc/sysctl.d/wg.conf"
+		fi
+	else
+		echo -e "${RED}Error setting reserved ports for WireGuard peer!${NC} Check if ip_local_reserved_ports parameter is available on your system."
+	fi
+
 	rm -f "${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 }
 
@@ -472,7 +502,7 @@ cleanConfigureWGServer() {
 	# Clean server conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.conf
 	sudo rm -f "/etc/sysctl.d/wg.conf"
-	sudo sysctl --system
+	sudo sysctl -p '/etc/sysctl.d/wg.conf'
 	# Clean client conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.sh
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}"/*.conf
@@ -503,6 +533,7 @@ startWGServer() {
 
 restartWGServer() {
 	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
+	sudo sysctl -p '/etc/sysctl.d/wg.conf'
 
 	if ! systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"; then
 		echo -e "${RED}WARNING: WireGuard does not seem to be running.${NC}"
@@ -616,7 +647,7 @@ manageMenu() {
 
 	MENU_OPTION=''
 	while ! echo "${MENU_OPTION}" | grep -qE '[1-8]'; do
-		read -rp "Select an option [1-7]: " MENU_OPTION
+		read -rp "Select an option [1-8]: " MENU_OPTION
 	done
 	case "${MENU_OPTION}" in
 	1)
