@@ -274,7 +274,7 @@ createServerNATscripts() {
 	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
 	# Reserve WireGuard port
 	echo "net.ipv4.ip_local_reserved_ports = ${SERVER_PORT}" | sudo tee -a "/etc/sysctl.d/wg.conf"
-	sudo sysctl --system
+	sudo sysctl -p '/etc/sysctl.d/wg.conf'
 }
 
 storeServerParams() {
@@ -490,7 +490,7 @@ cleanConfigureWGServer() {
 	# Clean server conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.conf
 	sudo rm -f "/etc/sysctl.d/wg.conf"
-	sudo sysctl --system
+	sudo sysctl -p '/etc/sysctl.d/wg.conf'
 	# Clean client conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.sh
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}"/*.conf
@@ -521,7 +521,7 @@ startWGServer() {
 
 restartWGServer() {
 	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
-	sudo sysctl --system
+	sudo sysctl -p '/etc/sysctl.d/wg.conf'
 
 	if ! systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"; then
 		echo -e "${RED}WARNING: WireGuard does not seem to be running.${NC}"
