@@ -51,6 +51,8 @@ The script supports both IPv4 and IPv6.
 
 You can customize the nftables rules by editing the `add-fullcone-nat.sh` file **BEFORE** running the installer script.
 
+The detailed explanations of these `nftables` rules can be found in my blog post [Understand routing and NAT with WireGuard VPN](https://xiahua.pages.dev/wg-route-nat/).
+
 ## Requirements
 
 Supported distributions:
