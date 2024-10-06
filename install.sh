@@ -635,7 +635,7 @@ manageMenu() {
 
 	MENU_OPTION=''
 	while ! echo "${MENU_OPTION}" | grep -qE '[1-8]'; do
-		read -rp "Select an option [1-7]: " MENU_OPTION
+		read -rp "Select an option [1-8]: " MENU_OPTION
 	done
 	case "${MENU_OPTION}" in
 	1)
