@@ -423,8 +423,8 @@ addClientWGConfEntry() {
 
 	# Add client forward ports to reserved ports
 	local current_ports
-	current_ports = $(sudo grep "net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f '2')
-	current_ports = "$current_ports" + "," + "$CLIENT_FORWARD_PORTS"
+	current_ports=$(sudo grep "net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f '2')
+	current_ports="$current_ports" + "," + "$CLIENT_FORWARD_PORTS"
 	sudo sed -i "s/^net.ipv4.ip_local_reserved_ports.*$/net.ipv4.ip_local_reserved_ports =${current_ports}/" "/etc/sysctl.d/wg.conf"
 }
 
