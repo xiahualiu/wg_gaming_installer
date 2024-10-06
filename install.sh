@@ -446,7 +446,7 @@ rmClientWGConfEntry() {
 		forward_ports=${forward_ports##\{}
 		forward_ports=${forward_ports%%\}}
 		# Remove this forward ports from reserved ports
-		if [ -n $forward_ports ]; then
+		if [ -n "$forward_ports" ]; then
 			sudo sed -i "s/,$forward_ports//" "/etc/sysctl.d/wg.conf"
 		fi
 	else
