@@ -105,7 +105,7 @@ uninstallonDebian() {
 }
 
 installAlmaLinux() {
-	if [ "$VERSION_ID" -ge 9 ]; then
+	if [ "$(echo "${VERSION_ID}" | cut -d'.' -f1)" -ge 9 ]; then
 		sudo dnf update -y
 		sudo modprobe wireguard
 		sudo dnf install -y wireguard-tools nftables qrencode curl git make wget
@@ -118,7 +118,7 @@ installAlmaLinux() {
 }
 
 uninstallAlmaLinux() {
-	if [ "$VERSION_ID" -ge 9 ]; then
+	if [ "$(echo "${VERSION_ID}" | cut -d'.' -f1)" -ge 9 ]; then
 		sudo modprobe -r wireguard
 		sudo dnf autoremove -y wireguard-tools qrencode
 	else
