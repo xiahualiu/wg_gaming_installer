@@ -513,7 +513,7 @@ cleanConfigureWGServer() {
 	# Clean server conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.conf
 	sudo rm -f "/etc/sysctl.d/wg.conf"
-	sudo sysctl -p '/etc/sysctl.d/wg.conf'
+	sudo sysctl --system
 	# Clean client conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.sh
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}"/*.conf
