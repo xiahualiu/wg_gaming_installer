@@ -566,7 +566,7 @@ listAllWGClients() {
 	while read -r line; do
 		if [[ $line =~ ^'CLIENT_NAME=' ]]; then
 			line=${line##CLIENT_NAME=}
-			port=$(grep -oE "dport {.+} dnat.+${line}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1)
+			port=$(sudo grep -oE "dport {.+} dnat.+${line}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1)
 			port=$(echo "$port" | cut -d '{' -f '2' | cut -d '}' -f '1')
 			echo "* $line [$port]"
 		fi
