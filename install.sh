@@ -105,14 +105,25 @@ uninstallonDebian() {
 }
 
 installAlmaLinux() {
-	sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
-	sudo dnf update -y
-	sudo dnf install -y epel-release elrepo-release
-	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make wget
+	if [ "$(echo "${VERSION_ID}" | cut -d'.' -f1)" -ge 9 ]; then
+		sudo dnf update -y
+		sudo modprobe wireguard
+		sudo dnf install -y wireguard-tools nftables qrencode curl git make wget
+	else
+		sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+		sudo dnf update -y
+		sudo dnf install -y epel-release elrepo-release
+		sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make wget
+	fi
 }
 
 uninstallAlmaLinux() {
-	sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
+	if [ "$(echo "${VERSION_ID}" | cut -d'.' -f1)" -ge 9 ]; then
+		sudo modprobe -r wireguard
+		sudo dnf autoremove -y wireguard-tools qrencode
+	else
+		sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
+	fi
 	sudo dnf clean all -y
 }
 
@@ -458,10 +469,10 @@ rmClientWGConfEntry() {
 
 addClientNATEntry() {
 	local line_n
-	line_n=$(grep -n "WG_Installer_IP_Rule_Starts" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | cut -d ':' -f '1')
+	line_n=$(sudo grep -n "WG_Installer_IP_Rule_Starts" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | cut -d ':' -f '1')
 	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip to $CLIENT_WG_IPV4 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
-	line_n=$(grep -n "WG_Installer_IP6_Rule_Starts" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | cut -d ':' -f '1')
+	line_n=$(sudo grep -n "WG_Installer_IP6_Rule_Starts" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | cut -d ':' -f '1')
 	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" udp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
@@ -502,7 +513,7 @@ cleanConfigureWGServer() {
 	# Clean server conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.conf
 	sudo rm -f "/etc/sysctl.d/wg.conf"
-	sudo sysctl -p '/etc/sysctl.d/wg.conf'
+	sudo sysctl --system
 	# Clean client conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.sh
 	sudo rm -f "${SCRIPT_TEMP_FOLDER}"/*.conf
@@ -555,7 +566,7 @@ listAllWGClients() {
 	while read -r line; do
 		if [[ $line =~ ^'CLIENT_NAME=' ]]; then
 			line=${line##CLIENT_NAME=}
-			port=$(grep -oE "dport {.+} dnat.+${line}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1)
+			port=$(sudo grep -oE "dport {.+} dnat.+${line}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1)
 			port=$(echo "$port" | cut -d '{' -f '2' | cut -d '}' -f '1')
 			echo "* $line [$port]"
 		fi
