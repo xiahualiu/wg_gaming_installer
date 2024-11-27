@@ -105,14 +105,25 @@ uninstallonDebian() {
 }
 
 installAlmaLinux() {
-	sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
-	sudo dnf update -y
-	sudo dnf install -y epel-release elrepo-release
-	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make wget
+	if [ "$VERSION_ID" -ge 9 ]; then
+		sudo dnf update -y
+		sudo modprobe wireguard
+		sudo dnf install -y wireguard-tools nftables qrencode curl git make wget
+	elif
+		sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+		sudo dnf update -y
+		sudo dnf install -y epel-release elrepo-release
+		sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make wget
+	fi
 }
 
 uninstallAlmaLinux() {
-	sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
+	if [ "$VERSION_ID" -ge 9 ]; then
+		sudo modprobe -r wireguard
+		sudo dnf autoremove -y wireguard-tools qrencode
+	elif
+		sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
+	fi
 	sudo dnf clean all -y
 }
 
