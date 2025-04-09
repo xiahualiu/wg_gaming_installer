@@ -27,7 +27,7 @@ SCRIPT_ROOT_DIR=$(
 
 # Check whether userspace or kernel WireGuard
 checkVirt() {
-	OS_VIRT=$(systemd-detect-virt)
+	OS_VIRT=$(systemd-detect-virt || true)
 	USERSPACE_WG='false'
 
 	if [ "$OS_VIRT" = 'openvz' ]; then
