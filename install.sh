@@ -25,7 +25,7 @@ SCRIPT_ROOT_DIR=$(
 	pwd
 )
 
-# Check whether userspace or kernel WireGuard
+# Checks the virtualization type and determines if userspace WireGuard is required
 checkVirt() {
 	OS_VIRT=$(systemd-detect-virt || true)
 	USERSPACE_WG='false'
@@ -48,7 +48,7 @@ checkVirt() {
 	fi
 }
 
-# Check whether OS is supported
+# Verifies if the operating system is supported and meets version requirements
 checkOS() {
 	source '/etc/os-release'
 	OS=$ID
@@ -82,11 +82,13 @@ checkOS() {
 ######################## Step 1 : Prepare Folders ##############################
 ################################################################################
 
+# Creates necessary directories for WireGuard configuration and temporary files
 prepareFolders() {
 	sudo mkdir -p "$WG_CONF_FOLDER"
 	mkdir -p "$SCRIPT_TEMP_FOLDER"
 }
 
+# Removes WireGuard configuration and temporary folders
 deleteFolders() {
 	sudo rm -rf "$WG_CONF_FOLDER" "$SCRIPT_TEMP_FOLDER"
 }
@@ -95,15 +97,18 @@ deleteFolders() {
 ########################## Step 2 : Install WG #################################
 ################################################################################
 
+# Installs WireGuard and dependencies on Debian/Ubuntu systems
 installonDebian() {
 	sudo apt-get update
 	sudo apt-get install -y wireguard nftables qrencode curl git make wget
 }
 
+# Uninstalls WireGuard and related packages from Debian/Ubuntu systems
 uninstallonDebian() {
 	sudo apt-get autoremove -y wireguard wireguard-tools qrencode
 }
 
+# Installs WireGuard and dependencies on AlmaLinux, handling version differences
 installAlmaLinux() {
 	if [ "$(echo "${VERSION_ID}" | cut -d'.' -f1)" -ge 9 ]; then
 		sudo dnf update -y
@@ -117,6 +122,7 @@ installAlmaLinux() {
 	fi
 }
 
+# Uninstalls WireGuard and related packages from AlmaLinux
 uninstallAlmaLinux() {
 	if [ "$(echo "${VERSION_ID}" | cut -d'.' -f1)" -ge 9 ]; then
 		sudo modprobe -r wireguard
@@ -127,35 +133,42 @@ uninstallAlmaLinux() {
 	sudo dnf clean all -y
 }
 
+# Installs WireGuard and dependencies on Rocky Linux
 installRockyLinux() {
 	sudo dnf update -y
 	sudo dnf install -y epel-release elrepo-release
 	sudo dnf install -y kmod-wireguard wireguard-tools nftables qrencode curl git make wget
 }
 
+# Uninstalls WireGuard and related packages from Rocky Linux
 uninstallRockyLinux() {
 	sudo dnf autoremove -y kmod-wireguard wireguard-tools qrencode
 	sudo dnf clean all -y
 }
 
+# Installs WireGuard and dependencies on Arch Linux
 installArchLinux() {
 	sudo pacman -Sy --noconfirm wireguard-tools nftables qrencode curl git make wget
 }
 
+# Uninstalls WireGuard and related packages from Arch Linux
 uninstallArchLinux() {
 	sudo pacman -R --noconfirm wireguard-tools qrencode
 }
 
+# Installs WireGuard and dependencies on Fedora
 installFedora() {
 	sudo dnf update -y
 	sudo dnf install -y wireguard-tools nftables qrencode curl git make wget
 }
 
+# Uninstalls WireGuard and related packages from Fedora
 uninstallFedora() {
 	sudo dnf autoremove -y wireguard-tools qrencode
 	sudo dnf clean all -y
 }
 
+# Installs Go and builds wireguard-go for userspace WireGuard implementation
 installUserspaceWG() {
 	bash <(curl -sL https://git.io/go-installer)
 	sudo ln -s "$HOME/.go/bin/go" "$GO_INSTALL_PATH"
@@ -167,6 +180,7 @@ installUserspaceWG() {
 	}
 }
 
+# Removes userspace WireGuard components if installed
 uninstallUserspaceWG() {
 	# If we have to use the userspace WireGuard
 	if [ $USERSPACE_WG = 'true' ]; then
@@ -177,6 +191,7 @@ uninstallUserspaceWG() {
 	fi
 }
 
+# Installs WireGuard based on the detected operating system
 installWG() {
 	# Install WireGuard tools and module
 	if [ "$OS" = 'ubuntu' ] || [ "$OS" = 'debian' ]; then
@@ -196,6 +211,7 @@ installWG() {
 	fi
 }
 
+# Uninstalls WireGuard based on the detected operating system
 cleanUpInstall() {
 	if [ "${OS}" = 'ubuntu' ] || [ "${OS}" = 'debian' ]; then
 		uninstallonDebian
@@ -218,6 +234,7 @@ cleanUpInstall() {
 ####################### Step 3 : Configure WG Server ###########################
 ################################################################################
 
+# Prompts the user for WireGuard server configuration details
 serverConfQuestions() {
 	clear
 	echo "I need to ask you a few questions to set up WireGuard server."
@@ -242,6 +259,10 @@ serverConfQuestions() {
 	done
 	while ! echo "$SERVER_WG_NIC" | grep -qE '^[a-zA-Z0-9_]+$' || [ ${#SERVER_WG_NIC} -gt 16 ]; do
 		read -rp "WireGuard interface name: " -e -i wg0 SERVER_WG_NIC
+		if (ip show "$SERVER_WG_NIC" 2>/dev/null); then
+			echo -e "${RED}This interface already exists!${NC}"
+			continue
+		fi
 	done
 	while ! echo "$SERVER_WG_IPV4" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; do
 		read -rp "Server's WireGuard IPv4: " -e -i 10.66.66.1 SERVER_WG_IPV4
@@ -253,10 +274,9 @@ serverConfQuestions() {
 	# Generate random number within private ports range
 	RANDOM_PORT=$(shuf -i65001-65535 -n1)
 	SERVER_PORT=''
-	while (! echo "$SERVER_PORT" | grep -qE '^[0-9]+$') || [ "$SERVER_PORT" -gt 65535 ] || [ "$SERVER_PORT" -lt 65000 ]; do
+	while (! echo "$SERVER_PORT" | grep -qE '^[0-9]+$') || [ "$SERVER_PORT" -gt 65535 ] || [ "$SERVER_PORT" -lt 1 ] || ss -tuln | grep -q ":$SERVER_PORT "; do
 		read -rp "Server's WireGuard port [1-65535]: " -e -i "${RANDOM_PORT}" SERVER_PORT
 	done
-
 	# Cloudflare DNS by default
 	CLIENT_DNS_1=''
 	CLIENT_DNS_2=''
@@ -271,7 +291,14 @@ serverConfQuestions() {
 	done
 }
 
+# Creates and configures NAT scripts for WireGuard server
 createServerNATscripts() {
+	# Check if nftables is installed
+	if ! command -v nft >/dev/null 2>&1; then
+		echo "nftables is required but not installed. Please install it and rerun the script."
+		exit 1
+	fi
+
 	sudo cp "${SCRIPT_ROOT_DIR}/templates/add-fullcone-nat.sh" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 	sudo cp "${SCRIPT_ROOT_DIR}/templates/rm-fullcone-nat.sh" "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
 
@@ -284,14 +311,17 @@ createServerNATscripts() {
 	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
 	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
 	# Reserve WireGuard port
-	if ls '/proc/sys/net/ipv4/ip_local_reserved_ports' 2>'/dev/null'; then
-		echo "net.ipv4.ip_local_reserved_ports = ${SERVER_PORT}" | sudo tee -a "/etc/sysctl.d/wg.conf"
-		sudo sysctl -p '/etc/sysctl.d/wg.conf'
+	if sysctl net.ipv4.ip_local_reserved_ports &>/dev/null; then
+		EXISTING_PORTS=$(sysctl -n net.ipv4.ip_local_reserved_ports)
+		NEW_PORTS="${EXISTING_PORTS:+$EXISTING_PORTS,}$SERVER_PORT"
+		echo "net.ipv4.ip_local_reserved_ports = $NEW_PORTS" | sudo tee -a "/etc/sysctl.d/wg.conf"
+		sudo sysctl -p "/etc/sysctl.d/wg.conf"
 	else
-		echo -e "${RED}Error setting reserved ports for WireGuard!${NC} Check if ip_local_reserved_ports parameter is available on your system."
+		echo -e "${RED}Warning: ip_local_reserved_ports not supported on this system.${NC}"
 	fi
 }
 
+# Stores server configuration parameters in a file for later use
 storeServerParams() {
 	{
 		echo "# Parameters used for WireGuard server configuration."
@@ -307,6 +337,7 @@ storeServerParams() {
 	} >"${SCRIPT_TEMP_FOLDER}/.params"
 }
 
+# Configures the WireGuard server with keys and settings
 configureWGServer() {
 	serverConfQuestions
 
@@ -322,11 +353,13 @@ configureWGServer() {
 		echo "PostDown = ${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
 		echo "SaveConfig = false"
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
+	sudo chmod 600 "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 
 	createServerNATscripts
 	storeServerParams
 }
 
+# Prompts the user for new WireGuard client configuration details
 newClientQuestions() {
 	# If server public ip is ipv6, add [] when needed
 	if echo "${SERVER_PUB_IP}" | grep -q ':'; then
@@ -402,11 +435,22 @@ newClientQuestions() {
 	done
 
 	CLIENT_FORWARD_PORTS=''
-	while [[ ! "$CLIENT_FORWARD_PORTS" =~ ^[0-9]+ ]] || [[ "$CLIENT_FORWARD_PORTS" =~ [[:space:]] ]]; do
+	while true; do
 		read -rp "The ports you want to forward for this client, (e.g. 80,443,100-200) NO space allowed: " -e CLIENT_FORWARD_PORTS
+
+		# Remove any spaces
+		CLIENT_FORWARD_PORTS=${CLIENT_FORWARD_PORTS// /}
+
+		# Validate port format using regex for comma-separated list of ports and port ranges
+		if [[ "$CLIENT_FORWARD_PORTS" =~ ^([0-9]+(-[0-9]+)?)(,([0-9]+(-[0-9]+)?))*$ ]]; then
+			break
+		else
+			echo -e "${ORANGE}Invalid port format. Please use comma-separated ports or port ranges (e.g., 80,443,1000-2000)${NC}"
+		fi
 	done
 }
 
+# Adds a new client entry to the WireGuard server configuration
 addClientWGConfEntry() {
 	# Generate key pair for the client
 	CLIENT_PRIV_KEY=$(wg genkey)
@@ -426,6 +470,7 @@ addClientWGConfEntry() {
 		echo "Endpoint = ${ENDPOINT}"
 		echo 'AllowedIPs = 0.0.0.0/0,::/0'
 	} >"${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
+	chmod 600 "${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 
 	# Add the client as a peer to the server
 	{
@@ -441,12 +486,13 @@ addClientWGConfEntry() {
 		local current_ports
 		current_ports=$(sudo grep "net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f '2')
 		current_ports="$current_ports,$CLIENT_FORWARD_PORTS"
-		sudo sed -i "s/^net.ipv4.ip_local_reserved_ports.*$/net.ipv4.ip_local_reserved_ports =${current_ports}/" "/etc/sysctl.d/wg.conf"
+		sudo sed -i "s/^net.ipv4.ip_local_reserved_ports.*$/net.ipv4.ip_local_reserved_ports = ${current_ports}/" "/etc/sysctl.d/wg.conf"
 	else
 		echo -e "${RED}Error setting reserved ports for WireGuard peer!${NC} Check if ip_local_reserved_ports parameter is available on your system."
 	fi
 }
 
+# Removes a client entry from the WireGuard server configuration
 rmClientWGConfEntry() {
 	local client_name="$1"
 	sudo sed -i "/# WG_CLIENT ${client_name}/d" "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
@@ -458,7 +504,22 @@ rmClientWGConfEntry() {
 		forward_ports=${forward_ports%%\}}
 		# Remove this forward ports from reserved ports
 		if [ -n "$forward_ports" ]; then
-			sudo sed -i "s/,$forward_ports//" "/etc/sysctl.d/wg.conf"
+			# Capture the entire current reserved ports string
+			local current_reserved=$(grep "^net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f 2 | tr -d ' ')
+			# Precisely remove the ports (handling beginning, middle, or end positions)
+			if [[ "$current_reserved" == "$forward_ports" ]]; then
+				# Only ports in the list - remove the whole line
+				sudo sed -i "/^net.ipv4.ip_local_reserved_ports/d" "/etc/sysctl.d/wg.conf"
+			elif [[ "$current_reserved" == "$forward_ports,"* ]]; then
+				# At the beginning
+				sudo sed -i "s/^net.ipv4.ip_local_reserved_ports = $forward_ports,/net.ipv4.ip_local_reserved_ports = /" "/etc/sysctl.d/wg.conf"
+			elif [[ "$current_reserved" == *",$forward_ports" ]]; then
+				# At the end
+				sudo sed -i "s/,$forward_ports$//" "/etc/sysctl.d/wg.conf"
+			else
+				# In the middle
+				sudo sed -i "s/,$forward_ports,/,/" "/etc/sysctl.d/wg.conf"
+			fi
 		fi
 	else
 		echo -e "${RED}Error setting reserved ports for WireGuard peer!${NC} Check if ip_local_reserved_ports parameter is available on your system."
@@ -467,6 +528,7 @@ rmClientWGConfEntry() {
 	rm -f "${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 }
 
+# Adds NAT rules for a client's forwarded ports
 addClientNATEntry() {
 	local line_n
 	line_n=$(sudo grep -n "WG_Installer_IP_Rule_Starts" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | cut -d ':' -f '1')
@@ -477,20 +539,24 @@ addClientNATEntry() {
 	sudo sed -i "${line_n}a\        iifname \"$SERVER_PUB_NIC\" tcp dport {$CLIENT_FORWARD_PORTS} dnat ip6 to $CLIENT_WG_IPV6 comment \"WireGuardGamingInstaller_Client_${CLIENT_NAME}\"" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
+# Removes NAT rules for a specified client
 rmClientNATEntry() {
 	local client_name="$1"
 	sudo sed -i "/Client_${client_name}\"/d" "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 }
 
+# Adds a client's name to the parameters file
 addClientParam() {
 	echo "CLIENT_NAME=${CLIENT_NAME}" >>"${SCRIPT_TEMP_FOLDER}/.params"
 }
 
+# Removes a client's name from the parameters file
 rmClientParam() {
 	local client_name="$1"
 	sed -i "/CLIENT_NAME=${client_name}$/d" "${SCRIPT_TEMP_FOLDER}/.params"
 }
 
+# Cleans up client configuration in case of errors
 cleanWGClientConfiguration() {
 	echo "There were errors adding this new WireGuard client, please try again."
 	rmClientWGConfEntry "$CLIENT_NAME"
@@ -499,6 +565,7 @@ cleanWGClientConfiguration() {
 	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
 }
 
+# Adds a new WireGuard client configuration
 addWGClientConfiguration() {
 	newClientQuestions
 	addClientWGConfEntry
@@ -506,6 +573,7 @@ addWGClientConfiguration() {
 	addClientParam
 }
 
+# Cleans up the WireGuard server configuration
 cleanConfigureWGServer() {
 	SERVER_WG_NIC=${SERVER_WG_NIC:=}
 	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}" 2>/dev/null || true
@@ -525,6 +593,7 @@ cleanConfigureWGServer() {
 ####################### Final Step : Start WG Server ###########################
 ################################################################################
 
+# Starts and enables the WireGuard server
 startWGServer() {
 	sudo systemctl start "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl enable "wg-quick@${SERVER_WG_NIC}"
@@ -542,6 +611,7 @@ startWGServer() {
 ############################## Miscellaneous ###################################
 ################################################################################
 
+# Restarts the WireGuard server and reloads sysctl settings
 restartWGServer() {
 	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
 	sudo sysctl -p '/etc/sysctl.d/wg.conf'
@@ -553,11 +623,13 @@ restartWGServer() {
 	fi
 }
 
+# Displays a client's configuration as a QR code
 showClientQRCode() {
 	qrencode -t ansiutf8 -l L <"${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 	echo "It is also available in ${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 }
 
+# Lists all configured WireGuard clients with their forwarded ports
 listAllWGClients() {
 	echo "Current WireGuard clients (<client_name> [forward_ports]):"
 	echo ""
@@ -574,6 +646,7 @@ listAllWGClients() {
 	echo ""
 }
 
+# Removes a specified WireGuard client's configuration
 rmWGClientConfiguration() {
 	if [ -z "${CLIENT_NAME:=}" ]; then
 		echo "There is no client to remove!"
@@ -602,6 +675,7 @@ rmWGClientConfiguration() {
 	done
 }
 
+# Shows the configuration of a specified WireGuard client
 showWGClientConfiguration() {
 	if [ -z "${CLIENT_NAME:=}" ]; then
 		echo "There is no client to show!"
@@ -615,6 +689,7 @@ showWGClientConfiguration() {
 	showClientQRCode
 }
 
+# Uninstalls WireGuard and removes all configuration files
 uninstallWg() {
 	echo ""
 	echo -e "\n${RED}WARNING: This will uninstall WireGuard and remove all the configuration files!${NC}"
@@ -640,9 +715,10 @@ uninstallWg() {
 	fi
 }
 
+# Displays a menu for managing an already installed WireGuard server
 manageMenu() {
 	echo "Welcome to WireGuard-install!"
-	echo "The git repository is available at: https://github.com/angristan/wireguard-install"
+	echo "The git repository is available at: https://github.com/xiahualiu/wg_gaming_installer"
 	echo ""
 	echo "It looks like WireGuard is already installed."
 	echo ""
