@@ -260,6 +260,7 @@ serverConfQuestions() {
 	while ! echo "$SERVER_WG_NIC" | grep -qE '^[a-zA-Z0-9_]+$' || [ ${#SERVER_WG_NIC} -gt 16 ]; do
 		read -rp "WireGuard interface name: " -e -i wg0 SERVER_WG_NIC
 		if (ip show "$SERVER_WG_NIC" 2>/dev/null); then
+			SERVER_WG_NIC=''
 			echo -e "${RED}This interface already exists!${NC}"
 			continue
 		fi
