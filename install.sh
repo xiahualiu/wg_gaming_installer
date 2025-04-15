@@ -259,7 +259,7 @@ serverConfQuestions() {
 	done
 	while ! echo "$SERVER_WG_NIC" | grep -qE '^[a-zA-Z0-9_]+$' || [ ${#SERVER_WG_NIC} -gt 16 ]; do
 		read -rp "WireGuard interface name: " -e -i wg0 SERVER_WG_NIC
-		if (ip link show "$SERVER_WG_NIC" >/dev/null 2>&1); then
+		if (ip link show "$SERVER_WG_NIC" &>/dev/null); then
 			SERVER_WG_NIC=''
 			echo -e "${RED}This interface already exists!${NC}"
 			continue
@@ -295,8 +295,8 @@ serverConfQuestions() {
 # Creates and configures NAT scripts for WireGuard server
 createServerNATscripts() {
 	# Check if nftables is installed
-	if ! command -v nft >/dev/null 2>&1; then
-		echo "nftables is required but not installed. Please install it and rerun the script."
+	if ! command -v nft &>/dev/null; then
+		echo "nftables is not detected, but it should be installed."
 		exit 1
 	fi
 
@@ -483,9 +483,9 @@ addClientWGConfEntry() {
 	} | sudo tee -a "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 
 	# Add client forward ports to reserved ports
-	if ls '/proc/sys/net/ipv4/ip_local_reserved_ports' 2>'/dev/null'; then
+	if sysctl net.ipv4.ip_local_reserved_ports &>/dev/null; then
 		local current_ports
-		current_ports=$(sudo grep "net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f '2')
+		current_ports=$(sudo grep "^net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f '2')
 		current_ports="$current_ports,$CLIENT_FORWARD_PORTS"
 		sudo sed -i "s/^net.ipv4.ip_local_reserved_ports.*$/net.ipv4.ip_local_reserved_ports = ${current_ports}/" "/etc/sysctl.d/wg.conf"
 	else
@@ -498,7 +498,7 @@ rmClientWGConfEntry() {
 	local client_name="$1"
 	sudo sed -i "/# WG_CLIENT ${client_name}/d" "${WG_CONF_FOLDER}/$SERVER_WG_NIC.conf"
 	# Find forward ports on the NAT entry
-	if ls '/proc/sys/net/ipv4/ip_local_reserved_ports' 2>'/dev/null'; then
+	if sysctl net.ipv4.ip_local_reserved_ports &>/dev/null; then
 		local forward_ports
 		forward_ports=$(sudo grep -o "dport.*Client_${client_name}\"$" "${WG_CONF_FOLDER}/add-fullcone-nat.sh" | head -1 | cut -d ' ' -f '2')
 		forward_ports=${forward_ports##\{}
@@ -506,7 +506,8 @@ rmClientWGConfEntry() {
 		# Remove this forward ports from reserved ports
 		if [ -n "$forward_ports" ]; then
 			# Capture the entire current reserved ports string
-			local current_reserved=$(grep "^net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f 2 | tr -d ' ')
+			local current_reserved=''
+			current_reserved=$(grep "^net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f 2 | tr -d ' ')
 			# Precisely remove the ports (handling beginning, middle, or end positions)
 			if [[ "$current_reserved" == "$forward_ports" ]]; then
 				# Only ports in the list - remove the whole line
