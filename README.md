@@ -16,6 +16,12 @@ This project is a bash script designed to set up a [WireGuard VPN](https://www.w
     - Switched from legacy `iptables` to `nftables` rules.
     - Added shellcheck GitHub Action.
 
+- 10/08/2025 Minor update.
+    - Added an extra SNAT rule to the server nftable rules.
+        - The WG on the client side now only tunnels reply packets to WG server.
+        - Normal network traffic is no longer affected by the WG tunnel.
+    - Better `sysctl` control when turning on/off the WG service.
+
 ## What it does
 
 #### Before using WireGuard
