@@ -469,7 +469,7 @@ addClientWGConfEntry() {
 		echo "PublicKey = ${SERVER_PUB_KEY}"
 		echo "PresharedKey = ${CLIENT_PRE_SHARED_KEY}"
 		echo "Endpoint = ${ENDPOINT}"
-		echo 'AllowedIPs = 0.0.0.0/0,::/0'
+		echo "AllowedIPs = ${SERVER_WG_IPV4}/32,${SERVER_WG_IPV6}/128"
 	} >"${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 	chmod 600 "${SCRIPT_TEMP_FOLDER}/$SERVER_WG_NIC-client-${CLIENT_NAME}.conf"
 
