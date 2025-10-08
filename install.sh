@@ -308,15 +308,21 @@ createServerNATscripts() {
 
 	sudo chmod +x "${WG_CONF_FOLDER}/add-fullcone-nat.sh"
 	sudo chmod +x "${WG_CONF_FOLDER}/rm-fullcone-nat.sh"
+
 	# Enable routing
-	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg.conf"
-	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg.conf"
+	echo "net.ipv4.ip_forward = 1" | sudo tee "/etc/sysctl.d/wg-start.conf"
+	echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a "/etc/sysctl.d/wg-start.conf"
+
+	# Disable routing on stop
+	echo "net.ipv4.ip_forward = 0" | sudo tee "/etc/sysctl.d/wg-stop.conf"
+	echo "net.ipv6.conf.all.forwarding = 0" | sudo tee -a "/etc/sysctl.d/wg-stop.conf"
+
 	# Reserve WireGuard port
 	if sysctl net.ipv4.ip_local_reserved_ports &>/dev/null; then
 		EXISTING_PORTS=$(sysctl -n net.ipv4.ip_local_reserved_ports)
 		NEW_PORTS="${EXISTING_PORTS:+$EXISTING_PORTS,}$SERVER_PORT"
-		echo "net.ipv4.ip_local_reserved_ports = $NEW_PORTS" | sudo tee -a "/etc/sysctl.d/wg.conf"
-		sudo sysctl -p "/etc/sysctl.d/wg.conf"
+		echo "net.ipv4.ip_local_reserved_ports = $NEW_PORTS" | sudo tee -a "/etc/sysctl.d/wg-start.conf"
+		echo "net.ipv4.ip_local_reserved_ports = " | sudo tee -a "/etc/sysctl.d/wg-stop.conf"
 	else
 		echo -e "${RED}Warning: ip_local_reserved_ports not supported on this system.${NC}"
 	fi
@@ -485,9 +491,9 @@ addClientWGConfEntry() {
 	# Add client forward ports to reserved ports
 	if sysctl net.ipv4.ip_local_reserved_ports &>/dev/null; then
 		local current_ports
-		current_ports=$(sudo grep "^net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f '2')
+		current_ports=$(sudo grep "^net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg-start.conf" | cut -d '=' -f '2')
 		current_ports="$current_ports,$CLIENT_FORWARD_PORTS"
-		sudo sed -i "s/^net.ipv4.ip_local_reserved_ports.*$/net.ipv4.ip_local_reserved_ports = ${current_ports}/" "/etc/sysctl.d/wg.conf"
+		sudo sed -i "s/^net.ipv4.ip_local_reserved_ports.*$/net.ipv4.ip_local_reserved_ports = ${current_ports}/" "/etc/sysctl.d/wg-start.conf"
 	else
 		echo -e "${RED}Error setting reserved ports for WireGuard peer!${NC} Check if ip_local_reserved_ports parameter is available on your system."
 	fi
@@ -507,20 +513,20 @@ rmClientWGConfEntry() {
 		if [ -n "$forward_ports" ]; then
 			# Capture the entire current reserved ports string
 			local current_reserved=''
-			current_reserved=$(grep "^net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg.conf" | cut -d '=' -f 2 | tr -d ' ')
+			current_reserved=$(grep "^net.ipv4.ip_local_reserved_ports" "/etc/sysctl.d/wg-start.conf" | cut -d '=' -f 2 | tr -d ' ')
 			# Precisely remove the ports (handling beginning, middle, or end positions)
 			if [[ "$current_reserved" == "$forward_ports" ]]; then
 				# Only ports in the list - remove the whole line
-				sudo sed -i "/^net.ipv4.ip_local_reserved_ports/d" "/etc/sysctl.d/wg.conf"
+				sudo sed -i "/^net.ipv4.ip_local_reserved_ports/d" "/etc/sysctl.d/wg-start.conf"
 			elif [[ "$current_reserved" == "$forward_ports,"* ]]; then
 				# At the beginning
-				sudo sed -i "s/^net.ipv4.ip_local_reserved_ports = $forward_ports,/net.ipv4.ip_local_reserved_ports = /" "/etc/sysctl.d/wg.conf"
+				sudo sed -i "s/^net.ipv4.ip_local_reserved_ports = $forward_ports,/net.ipv4.ip_local_reserved_ports = /" "/etc/sysctl.d/wg-start.conf"
 			elif [[ "$current_reserved" == *",$forward_ports" ]]; then
 				# At the end
-				sudo sed -i "s/,$forward_ports$//" "/etc/sysctl.d/wg.conf"
+				sudo sed -i "s/,$forward_ports$//" "/etc/sysctl.d/wg-start.conf"
 			else
 				# In the middle
-				sudo sed -i "s/,$forward_ports,/,/" "/etc/sysctl.d/wg.conf"
+				sudo sed -i "s/,$forward_ports,/,/" "/etc/sysctl.d/wg-start.conf"
 			fi
 		fi
 	else
@@ -578,11 +584,10 @@ addWGClientConfiguration() {
 # Cleans up the WireGuard server configuration
 cleanConfigureWGServer() {
 	SERVER_WG_NIC=${SERVER_WG_NIC:=}
-	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}" 2>/dev/null || true
-	sudo systemctl disable "wg-quick@${SERVER_WG_NIC}" 2>/dev/null || true
 	# Clean server conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.conf
-	sudo rm -f "/etc/sysctl.d/wg.conf"
+	sudo rm -f "/etc/sysctl.d/wg-start.conf"
+	sudo rm -f "/etc/sysctl.d/wg-stop.conf"
 	sudo sysctl --system
 	# Clean client conf
 	sudo rm -f "${WG_CONF_FOLDER}"/*.sh
@@ -600,6 +605,9 @@ startWGServer() {
 	sudo systemctl start "wg-quick@${SERVER_WG_NIC}"
 	sudo systemctl enable "wg-quick@${SERVER_WG_NIC}"
 
+	# Enable routing
+	sudo sysctl -p '/etc/sysctl.d/wg-start.conf'
+
 	if ! systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"; then
 		echo -e "\n${RED}WARNING: WireGuard does not seem to be running.${NC}"
 		echo -e "${ORANGE}You can check if WireGuard is running with: systemctl status wg-quick@$SERVER_WG_NIC${NC}"
@@ -616,7 +624,9 @@ startWGServer() {
 # Restarts the WireGuard server and reloads sysctl settings
 restartWGServer() {
 	sudo systemctl restart "wg-quick@${SERVER_WG_NIC}"
-	sudo sysctl -p '/etc/sysctl.d/wg.conf'
+
+	# Enable routing
+	sudo sysctl -p '/etc/sysctl.d/wg-start.conf'
 
 	if ! systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"; then
 		echo -e "${RED}WARNING: WireGuard does not seem to be running.${NC}"
@@ -691,14 +701,31 @@ showWGClientConfiguration() {
 	showClientQRCode
 }
 
+# Stops and disables the WireGuard server
+stopWGServer() {
+	sudo systemctl stop "wg-quick@${SERVER_WG_NIC}"
+	sudo systemctl disable "wg-quick@${SERVER_WG_NIC}"
+
+	# Disable routing and reserved ports
+	sudo sysctl -p '/etc/sysctl.d/wg-stop.conf'
+
+	if systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"; then
+		echo -e "\n${RED}WARNING: WireGuard does not seem to be stopped.${NC}"
+		echo -e "${ORANGE}You can check if WireGuard is running with: systemctl status wg-quick@$SERVER_WG_NIC${NC}"
+	else
+		echo -e "WireGuard server stopped sucessfully."
+	fi
+}
+
 # Uninstalls WireGuard and removes all configuration files
-uninstallWg() {
+uninstallWG() {
 	echo ""
 	echo -e "\n${RED}WARNING: This will uninstall WireGuard and remove all the configuration files!${NC}"
 	echo -e "${ORANGE}Please backup the /etc/wireguard directory if you want to keep your configuration files.\n${NC}"
 	read -rp "Do you really want to remove WireGuard? [y/n]: " -e REMOVE
 	REMOVE=${REMOVE:-n}
 	if [ "$REMOVE" = 'y' ]; then
+		stopWGServer
 		cleanConfigureWGServer
 		cleanUpInstall
 		deleteFolders
@@ -717,7 +744,7 @@ uninstallWg() {
 	fi
 }
 
-# Displays a menu for managing an already installed WireGuard server
+
 manageMenu() {
 	echo "Welcome to WireGuard-install!"
 	echo "The git repository is available at: https://github.com/xiahualiu/wg_gaming_installer"
@@ -740,13 +767,13 @@ manageMenu() {
 	done
 	case "${MENU_OPTION}" in
 	1)
-		sudo systemctl stop "wg-quick@$SERVER_WG_NIC"
+		stopWGServer
 		;;
 	2)
-		sudo systemctl restart "wg-quick@$SERVER_WG_NIC"
+		restartWGServer
 		;;
 	3)
-		uninstallWg
+		uninstallWG
 		;;
 	4)
 		listAllWGClients
