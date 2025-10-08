@@ -832,7 +832,6 @@ if ! cat "$SCRIPT_TEMP_FOLDER/.status" 2>/dev/null | grep -q 'Final Step Done'; 
 	# 3rd Step: Configure WireGuard server
 	trap cleanConfigureWGServer EXIT
 	configureWGServer
-	startWGServer
 	echo 'Final Step Done' >>"$SCRIPT_TEMP_FOLDER/.status"
 	trap - EXIT
 fi
@@ -840,6 +839,6 @@ fi
 # If first install, add a new client after the server is installed
 addWGClientConfiguration
 trap cleanWGClientConfiguration EXIT
-restartWGServer
+startWGServer
 showClientQRCode
 trap - EXIT
