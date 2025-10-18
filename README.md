@@ -6,6 +6,10 @@
 
 This project is a bash script designed to set up a [WireGuard VPN](https://www.wireguard.com/) tailored for personal gaming or torrenting use. It now supports multiple WireGuard peers!
 
+## Rewrite in Python is in Progress!
+
+I am going to rewrite this script using python, which has better string manipulation and better data storage.
+
 ## Update Logs
 
 - 09/29/2024 Major update.
