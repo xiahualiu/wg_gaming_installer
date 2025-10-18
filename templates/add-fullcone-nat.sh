@@ -26,7 +26,6 @@ table ip nat {
     chain POSTROUTING {
         type nat hook postrouting priority srcnat; policy accept;
         oifname "$SERVER_PUB_NIC" counter masquerade comment "WireGuardGamingInstaller"
-        oifname "$SERVER_WG_NIC" counter masquerade comment "WireGuardGamingInstaller"
     }
 
     chain PREROUTING {
@@ -39,7 +38,6 @@ table ip6 nat {
     chain POSTROUTING {
         type nat hook postrouting priority srcnat; policy accept;
         oifname "$SERVER_PUB_NIC" counter masquerade comment "WireGuardGamingInstaller"
-        oifname "$SERVER_WG_NIC" counter masquerade comment "WireGuardGamingInstaller"
     }
 
     chain PREROUTING {
