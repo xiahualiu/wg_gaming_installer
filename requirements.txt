@@ -1,0 +1,2 @@
+psutil>=5.9
+prompt_toolkit>=3.0

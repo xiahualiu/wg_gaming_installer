@@ -1,0 +1,343 @@
+"""
+SQLite related utility functions for WireGuard gaming installer.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from contextlib import contextmanager
+from dataclasses import dataclass
+from enum import IntEnum, auto
+from pathlib import Path
+from textwrap import dedent
+from typing import Generator
+
+
+@dataclass(frozen=True, slots=True)
+class ServerConfig:
+    server_nic_name: str
+    server_ipv4: str
+    server_ipv6: str
+
+
+@dataclass(frozen=True, slots=True)
+class WGConfig:
+    wg_nic_name: str
+    wg_ipv4: str
+    wg_ipv6: str
+    wg_listen_port: int
+    wg_private_key: str
+    wg_public_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class PeerConfig:
+    client_name: str
+    client_ipv4: str
+    client_ipv6: str
+    public_key: str
+    preshared_key: str
+    forward_ports: str
+
+
+class InstallStatus(IntEnum):
+    NOT_STARTED = auto()
+    SW_INSTALLED = auto()
+    SERVER_IF_CONFIGURED = auto()
+    SERVER_WG_CONFIGURED = auto()
+    PEERS_CONFIGURED = auto()
+
+
+def create_config_db(db_conn: sqlite3.Connection) -> None:
+    """
+    Create or reset the SQLite database table used to store WireGuard configurations.
+    If any table exists it will be dropped and recreated with the schema:
+
+    Table : server_config
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        server_nic_name TEXT,
+        server_ipv4     TEXT,
+        server_ipv6     TEXT
+
+    Table : wg_server_config
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        wg_nic_name     TEXT,
+        wg_ipv4         TEXT,
+        wg_ipv6         TEXT,
+        wg_listen_port  INTEGER CHECK (wg_listen_port BETWEEN 1 AND 65535),
+        wg_private_key TEXT,
+        wg_public_key  TEXT
+
+    Table : wg_peer_config
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_name     TEXT,
+        client_ipv4     TEXT,
+        client_ipv6     TEXT,
+        public_key      TEXT,
+        preshared_key   TEXT,
+        forward_ports   TEXT
+
+    Table : install_status
+        step_name       TEXT PRIMARY KEY,
+    """
+
+    # Drop existing table if exists and create new one
+    cur = db_conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS server_config;")
+    cur.execute("DROP TABLE IF EXISTS wg_config;")
+    cur.execute("DROP TABLE IF EXISTS peers;")
+    cur.execute("DROP TABLE IF EXISTS install_status;")
+
+    cur.execute(
+        dedent(
+            """
+            CREATE TABLE server_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                server_nic_name TEXT,
+                server_ipv4     TEXT,
+                server_ipv6     TEXT
+            );
+            """
+        )
+    )
+    cur.execute(
+        dedent(
+            """
+            CREATE TABLE wg_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                wg_nic_name     TEXT,
+                wg_ipv4         TEXT,
+                wg_ipv6         TEXT,
+                wg_listen_port  INTEGER
+                CHECK (wg_listen_port BETWEEN 1 AND 65535),
+                wg_private_key  TEXT,
+                wg_public_key   TEXT
+            );
+            """
+        )
+    )
+    cur.execute(
+        dedent(
+            """
+            CREATE TABLE wg_peer_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_name     TEXT,
+                client_ipv4     TEXT,
+                client_ipv6     TEXT,
+                public_key      TEXT,
+                preshared_key   TEXT,
+                forward_ports   TEXT
+            );
+            """
+        )
+    )
+    cur.execute(
+        dedent(
+            """
+            CREATE TABLE install_status (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                state TEXT NOT NULL DEFAULT 'not_started'
+                CHECK (state IN (
+                    'not_started',
+                    'sw_installed',
+                    'server_if_configured',
+                    'server_wg_configured',
+                    'peers_configured',
+                ))
+            );
+            """
+        )
+    )
+    # set initial state to 'not_started'
+    cur.execute(
+        dedent(
+            """
+            INSERT OR REPLACE INTO install_status (id, state)
+            VALUES (1, 'not_started');
+            """
+        )
+    )
+    db_conn.commit()
+
+
+@contextmanager
+def conf_db_connected(db_path: Path) -> Generator[sqlite3.Connection, None, None]:
+    """
+    Context manager to connect to the SQLite database. The context manager also starts
+    a transaction and ensures that the connection is properly closed after use.
+
+    Args:
+        db_path (Path): The path to the SQLite database file.
+    Yields:
+        sqlite3.Connection: The database connection object.
+    """
+    if not db_path.parent.exists():
+        raise FileNotFoundError(f"Directory {db_path.parent} does not exist.")
+    conn: sqlite3.Connection = sqlite3.connect(db_path)
+    conn.execute("BEGIN;")
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.commit()
+        conn.close()
+
+
+def read_install_status(db_conn: sqlite3.Connection) -> InstallStatus:
+    """
+    Read the current installation status from the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+    Returns:
+        str: The current installation status.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute(
+        dedent(
+            """
+            SELECT state FROM install_status WHERE id = 1;
+            """
+        )
+    )
+    row: sqlite3.Row = cur.fetchone()
+    if row:
+        return InstallStatus[row['state'].upper()]
+    else:
+        return InstallStatus.NOT_STARTED
+
+
+def update_install_status(
+    db_conn: sqlite3.Connection, new_state: InstallStatus
+) -> None:
+    """
+    Update the installation status in the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+        new_state (str): The new installation status to set.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute(
+        dedent(
+            """
+            REPLACE INTO install_status (id, state)
+            VALUES (1, ?);
+            """
+        ),
+        (new_state.name.lower(),),
+    )
+
+
+def read_server_config(db_conn: sqlite3.Connection) -> ServerConfig | None:
+    """
+    Read the server configuration from the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+    Returns:
+        ServerConfig | None: The server configuration if set, otherwise None.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute("SELECT * FROM server_config WHERE id = 1;")
+    row: sqlite3.Row | None = cur.fetchone()
+    if row:
+        return ServerConfig(
+            server_nic_name=row["server_nic_name"],
+            server_ipv4=row["server_ipv4"],
+            server_ipv6=row["server_ipv6"],
+        )
+    return None
+
+
+def update_server_config(
+    db_conn: sqlite3.Connection,
+    server_nic_name: str,
+    server_ipv4: str,
+    server_ipv6: str,
+) -> None:
+    """
+    Update the server configuration in the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+        server_nic_name (str): The server network interface name.
+        server_ipv4 (str): The server IPv4 address.
+        server_ipv6 (str): The server IPv6 address.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute(
+        dedent(
+            """
+            REPLACE INTO server_config (id, server_nic_name, server_ipv4, server_ipv6)
+            VALUES (1, ?, ?, ?);
+            """
+        ),
+        (server_nic_name, server_ipv4, server_ipv6),
+    )
+
+
+def read_wg_config(db_conn: sqlite3.Connection) -> WGConfig | None:
+    """
+    Read the server configuration from the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+    Returns:
+        dict[str, str] | None: The server configuration if set, otherwise None.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute("SELECT * FROM wg_config WHERE id = 1;")
+    row: sqlite3.Row | None = cur.fetchone()
+    if row:
+        return WGConfig(
+            wg_nic_name=row["wg_nic_name"],
+            wg_ipv4=row["wg_ipv4"],
+            wg_ipv6=row["wg_ipv6"],
+            wg_listen_port=row["wg_listen_port"],
+            wg_private_key=row["wg_private_key"],
+            wg_public_key=row["wg_public_key"],
+        )
+    return None
+
+
+def update_wg_config(
+    db_conn: sqlite3.Connection,
+    wg_nic_name: str,
+    wg_ipv4: str,
+    wg_ipv6: str,
+    wg_listen_port: int,
+    wg_private_key: str,
+    wg_public_key: str,
+) -> None:
+    """
+    Update the WireGuard server configuration in the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+        wg_nic_name (str): The WireGuard network interface name.
+        wg_ipv4 (str): The WireGuard IPv4 address.
+        wg_ipv6 (str): The WireGuard IPv6 address.
+        wg_listen_port (int): The WireGuard listen port.
+        wg_private_key (str): The WireGuard private key.
+        wg_public_key (str): The WireGuard public key.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute(
+        dedent(
+            """
+            REPLACE INTO wg_config (
+                id,
+                wg_nic_name,
+                wg_ipv4,
+                wg_ipv6,
+                wg_listen_port,
+                wg_private_key,
+                wg_public_key
+            )
+            VALUES (1, ?, ?, ?, ?, ?, ?);
+            """
+        ),
+        (
+            wg_nic_name,
+            wg_ipv4,
+            wg_ipv6,
+            wg_listen_port,
+            wg_private_key,
+            wg_public_key,
+        ),
+    )
