@@ -267,18 +267,13 @@ def read_server_config(db_conn: sqlite3.Connection) -> ServerConfig | None:
 
 
 def update_server_config(
-    db_conn: sqlite3.Connection,
-    server_nic_name: str,
-    server_ipv4: str,
-    server_ipv6: str,
+    db_conn: sqlite3.Connection, server_config: ServerConfig
 ) -> None:
     """
     Update the server configuration in the database.
     Args:
         db_conn (sqlite3.Connection): The database connection object.
-        server_nic_name (str): The server network interface name.
-        server_ipv4 (str): The server IPv4 address.
-        server_ipv6 (str): The server IPv6 address.
+        server_config (ServerConfig): The server configuration data.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
@@ -288,7 +283,11 @@ def update_server_config(
             VALUES (1, ?, ?, ?);
             """
         ),
-        (server_nic_name, server_ipv4, server_ipv6),
+        (
+            server_config.server_nic_name,
+            server_config.server_ipv4,
+            server_config.server_ipv6,
+        ),
     )
 
 
@@ -315,25 +314,12 @@ def read_wg_config(db_conn: sqlite3.Connection) -> WGConfig | None:
     return None
 
 
-def update_wg_config(
-    db_conn: sqlite3.Connection,
-    wg_nic_name: str,
-    wg_ipv4: str,
-    wg_ipv6: str,
-    wg_listen_port: int,
-    wg_private_key: str,
-    wg_public_key: str,
-) -> None:
+def update_wg_config(db_conn: sqlite3.Connection, wg_config: WGConfig) -> None:
     """
     Update the WireGuard server configuration in the database.
     Args:
         db_conn (sqlite3.Connection): The database connection object.
-        wg_nic_name (str): The WireGuard network interface name.
-        wg_ipv4 (str): The WireGuard IPv4 address.
-        wg_ipv6 (str): The WireGuard IPv6 address.
-        wg_listen_port (int): The WireGuard listen port.
-        wg_private_key (str): The WireGuard private key.
-        wg_public_key (str): The WireGuard public key.
+        wg_config (WGConfig): The WireGuard configuration data.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
@@ -352,11 +338,11 @@ def update_wg_config(
             """
         ),
         (
-            wg_nic_name,
-            wg_ipv4,
-            wg_ipv6,
-            wg_listen_port,
-            wg_private_key,
-            wg_public_key,
+            wg_config.wg_nic_name,
+            wg_config.wg_ipv4,
+            wg_config.wg_ipv6,
+            wg_config.wg_listen_port,
+            wg_config.wg_private_key,
+            wg_config.wg_public_key,
         ),
     )
