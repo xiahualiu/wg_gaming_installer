@@ -34,8 +34,8 @@ from sqlite_scripts import (
     read_install_status,
     read_server_config,
     update_install_status,
-    write_server_config,
-    write_wg_config,
+    update_server_config,
+    update_wg_config,
 )
 
 
@@ -122,7 +122,7 @@ def server_if_conf() -> None:
 
     # Save parameters to config db
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        write_server_config(
+        update_server_config(
             conn,
             ServerConfig(
                 server_nic_name=server_nic_name,
@@ -210,7 +210,7 @@ def server_wg_conf() -> None:
 
     # Save parameters to config db
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        write_wg_config(
+        update_wg_config(
             conn,
             WGConfig(
                 wg_nic_name=wg_nic_name,
