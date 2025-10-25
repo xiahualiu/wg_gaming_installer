@@ -312,6 +312,8 @@ def install_wg_package() -> None:
         )
         prompt("Press Enter to continue with WireGuard-Go installation...")
         install_wireguard_go()
+    else:
+        logging.info("In-kernel WireGuard implementation is supported.")
 
     # Step 3: update install status in database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:

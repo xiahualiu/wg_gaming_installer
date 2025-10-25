@@ -339,6 +339,10 @@ def install_wireguard_go() -> None:
             "Go not found, installing Go programming language using go-installer."
         )
         prompt("Press Enter to continue...")
+        logging.info(
+            "Installing latest Go compiler... "
+            "It could take several minutes. Please wait."
+        )
 
         # Install Go using go-installer script
         try:
