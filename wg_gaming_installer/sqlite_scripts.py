@@ -162,7 +162,7 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                     'sw_installed',
                     'server_if_configured',
                     'server_wg_configured',
-                    'peers_configured',
+                    'peers_configured'
                 ))
             );
             """
