@@ -321,7 +321,9 @@ if __name__ == "__main__":
     # Check if db exists
     logging.info("Checking if configuration database exists...")
     if not server_conf_db_path().exists():
-        create_config_db(server_conf_db_path())
+        server_conf_db_path().parent.mkdir(parents=True, exist_ok=True)
+        with conf_db_connected(db_path=server_conf_db_path()) as conn:
+            create_config_db(conn)
 
     # Continue installation from the beginning
     logging.info("Reading installation status from database...")
