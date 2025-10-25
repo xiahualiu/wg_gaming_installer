@@ -447,3 +447,29 @@ def disable_forwarding_sysctl() -> None:
         check=True,
         capture_output=True,
     )
+
+
+def start_wg_service(wg_nic_name: str) -> None:
+    """
+    Start and enable the WireGuard service.
+    """
+    logging.info("Starting and enabling WireGuard service")
+
+    subprocess.run(
+        ['systemctl', 'enable', '--now', f'wg-quick@{wg_nic_name}'],
+        check=True,
+        capture_output=True,
+    )
+
+
+def stop_wg_service(wg_nic_name: str) -> None:
+    """
+    Stop and disable the WireGuard service.
+    """
+    logging.info("Stopping and disabling WireGuard service")
+
+    subprocess.run(
+        ['systemctl', 'disable', '--now', f'wg-quick@{wg_nic_name}'],
+        check=True,
+        capture_output=True,
+    )

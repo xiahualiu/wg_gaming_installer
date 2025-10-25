@@ -24,7 +24,7 @@ class ServerConfig:
 class WGConfig:
     wg_nic_name: str
     wg_ipv4: str
-    wg_ipv6: str
+    wg_ipv6: str | None
     wg_listen_port: int
     wg_private_key: str
     wg_public_key: str
@@ -340,7 +340,7 @@ def update_wg_config(db_conn: sqlite3.Connection, wg_config: WGConfig) -> None:
         (
             wg_config.wg_nic_name,
             wg_config.wg_ipv4,
-            wg_config.wg_ipv6,
+            wg_config.wg_ipv6 or "",
             wg_config.wg_listen_port,
             wg_config.wg_private_key,
             wg_config.wg_public_key,
@@ -411,4 +411,22 @@ def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> Non
             peer_config.preshared_key,
             peer_config.forward_ports,
         ),
+    )
+
+
+def delete_peer_config(db_conn: sqlite3.Connection, peer_name: str) -> None:
+    """
+    Delete a peer configuration from the database by peer name.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+        peer_name (str): The name of the peer to delete.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute(
+        dedent(
+            """
+            DELETE FROM wg_peer_config WHERE peer_name = ?;
+            """
+        ),
+        (peer_name,),
     )

@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import random
 import socket
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from shell_scripts import (
     install_wg_dependencies,
     install_wireguard_go,
     need_userspace_wireguard,
+    start_wg_service,
     validate_ifname,
     validate_ipv4_address,
     validate_ipv6_address,
@@ -27,10 +29,13 @@ from shell_scripts import (
 )
 from sqlite_scripts import (
     InstallStatus,
+    PeerConfig,
     ServerConfig,
     WGConfig,
+    add_peer_config,
     conf_db_connected,
     create_config_db,
+    delete_peer_config,
     read_install_status,
     read_server_config,
     update_install_status,
@@ -105,6 +110,146 @@ def uninstall_delete_folders() -> None:
     Delete folders created by the installer.
     """
     delete_folders([wg_conf_folder(), script_temp_folder()])
+
+
+def server_wg_conf_path(wg_nic_name: Path) -> Path:
+    """
+    Returns the path to the WireGuard configuration file for the server.
+    Customizable.
+    """
+    return wg_conf_folder() / f"{wg_nic_name}.conf"
+
+
+def save_wg_server_conf(
+    wg_conf_path: Path,
+    wg_ipv4: str,
+    wg_ipv6: str | None,
+    wg_listen_port: int,
+    wg_private_key: str,
+) -> None:
+    """
+    Save the WireGuard configuration file.
+    """
+    logging.info(f"Saving WireGuard configuration file to {wg_conf_path}...")
+    with open(wg_conf_path, 'w') as f:
+        f.write("[Interface]\n")
+        if wg_ipv6:
+            f.write(f"Address = {wg_ipv4}/24, {wg_ipv6}/64\n")
+        else:
+            f.write(f"Address = {wg_ipv4}/24\n")
+        f.write(f"ListenPort = {wg_listen_port}\n")
+        f.write(f"PrivateKey = {wg_private_key}\n")
+        f.write(
+            f"PostUp = {Path(sys.executable).resolve()} "
+            f"{Path(__file__).resolve().parent}/wg_start.sh\n"
+        )
+        f.write(
+            f"PostDown = {Path(sys.executable).resolve()} "
+            f"{Path(__file__).resolve().parent}/wg_stop.sh\n"
+        )
+        f.write("SaveConfig = false\n")
+        f.write("\n")
+
+    # Set file permissions to 600
+    wg_conf_path.chmod(0o600)
+
+
+def append_wg_server_conf_peer(
+    wg_conf_path: Path,
+    peer_name: str,
+    peer_public_key: str,
+    peer_pre_shared_key: str,
+    peer_allowed_ips: str,
+) -> None:
+    """
+    Append a peer configuration to the WireGuard configuration file.
+    """
+    logging.info(
+        f"Appending {peer_name} to WireGuard configuration file {wg_conf_path}..."
+    )
+    with open(wg_conf_path, 'a') as f:
+        f.write(f"[Peer] # {peer_name}\n")
+        f.write(f"PublicKey = {peer_public_key}\n")
+        f.write(f"PreSharedKey = {peer_pre_shared_key}\n")
+        f.write(f"AllowedIPs = {peer_allowed_ips}\n")
+        f.write("\n")
+
+
+def rm_wg_server_conf_peer(
+    wg_conf_path: Path,
+    peer_name: str,
+) -> None:
+    """
+    Remove a peer configuration from the WireGuard configuration file.
+    """
+    logging.info(
+        f"Removing {peer_name} from WireGuard configuration file {wg_conf_path}..."
+    )
+    with open(wg_conf_path, 'r') as f:
+        lines = f.readlines()
+
+    with open(wg_conf_path, 'w') as f:
+        skip = False
+        for line in lines:
+            if line.strip() == f"[Peer] # {peer_name}":
+                skip = True
+            elif skip and line.startswith('['):
+                skip = False
+                f.write(line)
+            elif not skip:
+                f.write(line)
+
+
+def add_wg_peer(
+    wg_conf_path: Path,
+    peer_name: str,
+    peer_public_key: str,
+    peer_pre_shared_key: str,
+    peer_allowed_ips: str,
+) -> None:
+    """
+    Add a peer to the WireGuard configuration file.
+    """
+
+    # Append peer configuration
+    append_wg_server_conf_peer(
+        wg_conf_path,
+        peer_name,
+        peer_public_key,
+        peer_pre_shared_key,
+        peer_allowed_ips,
+    )
+
+    # Add peer info to the config database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        add_peer_config(
+            conn,
+            PeerConfig(
+                peer_name=peer_name,
+                peer_public_key=peer_public_key,
+                peer_pre_shared_key=peer_pre_shared_key,
+                peer_allowed_ips=peer_allowed_ips,
+            ),
+        )
+
+
+def rm_wg_peer(
+    wg_conf_path: Path,
+    peer_name: str,
+) -> None:
+    """
+    Remove a peer from the WireGuard configuration file.
+    """
+
+    # Remove peer configuration
+    rm_wg_server_conf_peer(
+        wg_conf_path,
+        peer_name,
+    )
+
+    # Remove peer info from the config database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        delete_peer_config(conn, peer_name)
 
 
 def server_if_conf() -> None:
@@ -186,8 +331,8 @@ def server_wg_conf() -> None:
         if not server_conf:
             raise RuntimeError("Server configuration not found in database.")
 
-    wg_ipv6: str = ""
-    if len(server_conf.server_ipv6) != 0:
+    wg_ipv6: str | None = None
+    if server_conf.server_ipv6:
         while True:
             default_wg_ipv6: str = 'fd42:42:42::1'
             wg_ipv6 = prompt(
@@ -230,6 +375,15 @@ def server_wg_conf() -> None:
     # Create a WireGuard private/public key pair
     server_priv, server_pub = wg_gen_keypair()
 
+    # Save WireGuard configuration parameters
+    save_wg_server_conf(
+        wg_conf_path=server_wg_conf_path(Path(wg_nic_name)),
+        wg_ipv4=wg_ipv4,
+        wg_ipv6=wg_ipv6,
+        wg_listen_port=wg_listen_port,
+        wg_private_key=server_priv,
+    )
+
     # Save parameters to config db
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
         update_wg_config(
@@ -243,6 +397,10 @@ def server_wg_conf() -> None:
                 wg_public_key=server_pub,
             ),
         )
+
+    # Also start the WireGuard interface now
+    logging.info("Bringing up the WireGuard interface...")
+    start_wg_service(wg_nic_name)
 
 
 def is_os_supported(os_id: str, os_version: str) -> bool:

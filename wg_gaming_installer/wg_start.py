@@ -88,7 +88,7 @@ for peer in peer_cfgs:
     if len(peer.peer_ipv4) > 0:
         nft.cmd(
             f'add rule ip nat prerouting iif {server_cfg.server_nic_name} '
-            f'tcp dport {peer.peer_listen_port} dnat to {peer.peer_ipv4}'
+            f'tcp dport {peer.forward_ports} dnat to {peer.peer_ipv4}'
         )
     else:
         logging.error(
@@ -108,7 +108,7 @@ if len(server_cfg.server_ipv6) > 0:
         if len(peer.peer_ipv6) > 0:
             nft.cmd(
                 f'add rule ip6 nat prerouting iif {server_cfg.server_nic_name} '
-                f'tcp dport {peer.peer_listen_port} dnat to {peer.peer_ipv6}'
+                f'tcp dport {peer.forward_ports} dnat to {peer.peer_ipv6}'
             )
         else:
             logging.error(
