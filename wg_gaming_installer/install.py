@@ -263,12 +263,27 @@ def continue_install(state: InstallStatus) -> list[Callable[[], None]]:
     Continue the installation process.
     Returns a list of functions to be executed in order.
     """
+
+    full_install_steps: list[Callable[[], None]] = [
+        db_setup,
+        install_wg_package,
+        server_if_conf,
+        server_wg_conf,
+    ]
+
     if state == InstallStatus.NOT_STARTED:
-        return [db_setup, install_wg_package]
+        return full_install_steps
     elif state == InstallStatus.DB_CREATED:
-        return [install_wg_package]
-    else:
+        return full_install_steps[1:]
+    elif state == InstallStatus.SW_INSTALLED:
+        return full_install_steps[2:]
+    elif state == InstallStatus.SERVER_IF_CONFIGURED:
+        return full_install_steps[3:]
+    elif state == InstallStatus.SERVER_WG_CONFIGURED:
+        logging.info("Installation already completed. No further action needed.")
         return []
+    else:
+        raise RuntimeError("Unknown installation state.")
 
 
 def db_setup() -> None:
@@ -276,6 +291,7 @@ def db_setup() -> None:
     Pre-installation setup tasks.
     """
     logging.info("Step 1: Setting up configuration database...")
+
     # Create temporary folder
     temp_folder = script_temp_folder()
     temp_folder.mkdir(parents=True, exist_ok=True)
@@ -284,6 +300,14 @@ def db_setup() -> None:
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
         create_config_db(conn)
         update_install_status(db_conn=conn, new_state=InstallStatus.DB_CREATED)
+
+
+def db_setup_failure_cleanup() -> None:
+    """
+    Cleanup tasks in case of database setup failure.
+    """
+    logging.info("Cleaning up after database setup failure...")
+    uninstall_delete_folders()
 
 
 def install_wg_package() -> None:
