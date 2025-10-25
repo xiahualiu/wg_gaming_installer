@@ -318,6 +318,11 @@ def install_wg_package() -> None:
 
 
 if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+    )
     # Check if db exists
     logging.info("Checking if configuration database exists...")
     if not server_conf_db_path().exists():

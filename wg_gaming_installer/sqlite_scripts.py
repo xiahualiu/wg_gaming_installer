@@ -177,7 +177,6 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
             """
         )
     )
-    db_conn.commit()
 
 
 @contextmanager
