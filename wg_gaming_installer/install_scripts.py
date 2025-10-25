@@ -47,6 +47,14 @@ def script_temp_folder() -> Path:
     return Path.home() / '.wireguard'
 
 
+def sysctl_conf_path() -> Path:
+    """
+    Returns the path to the sysctl configuration file for WireGuard.
+    Customizable.
+    """
+    return Path('/etc/sysctl.d/99-wireguard.conf')
+
+
 def server_conf_db_path() -> Path:
     """
     Returns the path to the server configuration file.
@@ -61,6 +69,20 @@ def wg_conf_folder() -> Path:
     Customizable.
     """
     return Path('/etc/wireguard')
+
+
+def wg_start_script_path() -> Path:
+    """
+    Returns the path to the WireGuard startup script.
+    """
+    return wg_conf_folder() / 'wg_start.sh'
+
+
+def wg_stop_script_path() -> Path:
+    """
+    Returns the path to the WireGuard stop script.
+    """
+    return wg_conf_folder() / 'wg_stop.sh'
 
 
 def tun_dev_path() -> Path:
@@ -350,6 +372,7 @@ if __name__ == "__main__":
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
+
     # Check if db exists
     logging.info("Checking if configuration database exists...")
     if not server_conf_db_path().exists():

@@ -233,91 +233,85 @@ def install_wg_dependencies(os_id: str, os_version: str) -> None:
     Install kernel WireGuard using the system's package manager.
     """
     os_l = os_id.lower()
-    try:
-        if os_l in ['ubuntu', 'debian']:
-            pkgs = [
-                'wireguard-tools',
-                'nftables',
-                'qrencode',
-                'curl',
-                'git',
-                'make',
-                'wget',
-            ]
-            subprocess.run(
-                ['sudo', 'apt-get', 'update'], check=True, capture_output=True
-            )
-            subprocess.run(
-                ['sudo', 'apt-get', 'install', '-y', '--no-install-recommends'] + pkgs,
-                check=True,
-                capture_output=True,
-            )
-            return
-
-        if os_l in ['centos', 'rocky', 'almalinux']:
-            pkgs = ['epel-release', 'elrepo-release']
-            subprocess.run(
-                ['sudo', 'dnf', 'install', '-y'] + pkgs, check=True, capture_output=True
-            )
-            subprocess.run(
-                [
-                    'sudo',
-                    'dnf',
-                    'install',
-                    '-y',
-                    'kmod-wireguard',
-                    'wireguard-tools',
-                    'nftables',
-                    'qrencode',
-                    'curl',
-                    'git',
-                    'make',
-                    'wget',
-                ],
-                check=True,
-                capture_output=True,
-            )
-            return
-
-        if os_l == 'fedora':
-            pkgs = [
-                'wireguard-tools',
-                'nftables',
-                'qrencode',
-                'curl',
-                'git',
-                'make',
-                'wget',
-            ]
-            subprocess.run(
-                ['sudo', 'dnf', 'install', '-y'] + pkgs, check=True, capture_output=True
-            )
-            return
-
-        if os_l == 'arch':
-            pkgs = [
-                'wireguard-tools',
-                'nftables',
-                'qrencode',
-                'curl',
-                'git',
-                'make',
-                'wget',
-            ]
-            # --needed prevents reinstall of already-installed packages
-            subprocess.run(
-                ['sudo', 'pacman', '-Syu', '--noconfirm', '--needed'] + pkgs,
-                check=True,
-                capture_output=True,
-            )
-            return
-
-    except subprocess.CalledProcessError as e:
-        logging.error(
-            f"Failed to install WireGuard and dependencies on {os_id} {os_version}: "
-            f"{e.stderr.decode().strip()}"
+    if os_l in ['ubuntu', 'debian']:
+        pkgs = [
+            'wireguard-tools',
+            'nftables',
+            'python3-nftables',
+            'qrencode',
+            'curl',
+            'git',
+            'make',
+            'wget',
+        ]
+        subprocess.run(['sudo', 'apt-get', 'update'], check=True, capture_output=True)
+        subprocess.run(
+            ['sudo', 'apt-get', 'install', '-y', '--no-install-recommends'] + pkgs,
+            check=True,
+            capture_output=True,
         )
-        raise RuntimeError("WireGuard installation failed.") from e
+        return
+
+    if os_l in ['centos', 'rocky', 'almalinux']:
+        pkgs = ['epel-release', 'elrepo-release']
+        subprocess.run(
+            ['sudo', 'dnf', 'install', '-y'] + pkgs, check=True, capture_output=True
+        )
+        subprocess.run(
+            [
+                'sudo',
+                'dnf',
+                'install',
+                '-y',
+                'kmod-wireguard',
+                'wireguard-tools',
+                'nftables',
+                'python3-nftables',
+                'qrencode',
+                'curl',
+                'git',
+                'make',
+                'wget',
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return
+
+    if os_l == 'fedora':
+        pkgs = [
+            'wireguard-tools',
+            'nftables',
+            'python3-nftables',
+            'qrencode',
+            'curl',
+            'git',
+            'make',
+            'wget',
+        ]
+        subprocess.run(
+            ['sudo', 'dnf', 'install', '-y'] + pkgs, check=True, capture_output=True
+        )
+        return
+
+    if os_l == 'arch':
+        pkgs = [
+            'wireguard-tools',
+            'nftables',
+            'python-nftables',
+            'qrencode',
+            'curl',
+            'git',
+            'make',
+            'wget',
+        ]
+        # --needed prevents reinstall of already-installed packages
+        subprocess.run(
+            ['sudo', 'pacman', '-Syu', '--noconfirm', '--needed'] + pkgs,
+            check=True,
+            capture_output=True,
+        )
+        return
 
 
 def install_wireguard_go() -> None:
@@ -417,3 +411,39 @@ def install_wireguard_go() -> None:
                 f"{e.stderr.decode().strip()}"
             )
             raise RuntimeError("Moving wireguard-go binary failed.") from e
+
+
+def enable_forwarding_sysctl() -> None:
+    """
+    Enable IP forwarding for both IPv4 and IPv6.
+    """
+    logging.info("Set sysctl to allow IP forwarding")
+
+    subprocess.run(
+        ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=1'],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ['sudo', 'sysctl', '-w', 'net.ipv6.conf.all.forwarding=1'],
+        check=True,
+        capture_output=True,
+    )
+
+
+def disable_forwarding_sysctl() -> None:
+    """
+    Disable IP forwarding for both IPv4 and IPv6.
+    """
+    logging.info("Unset sysctl to disable IP forwarding")
+
+    subprocess.run(
+        ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ['sudo', 'sysctl', '-w', 'net.ipv6.conf.all.forwarding=0'],
+        check=True,
+        capture_output=True,
+    )

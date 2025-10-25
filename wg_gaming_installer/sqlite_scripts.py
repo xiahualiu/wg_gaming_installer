@@ -32,9 +32,9 @@ class WGConfig:
 
 @dataclass(frozen=True, slots=True)
 class PeerConfig:
-    client_name: str
-    client_ipv4: str
-    client_ipv6: str
+    peer_name: str
+    peer_ipv4: str
+    peer_ipv6: str
     public_key: str
     preshared_key: str
     forward_ports: str
@@ -76,9 +76,9 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
 
     Table : wg_peer_config
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_name     TEXT,
-        client_ipv4     TEXT,
-        client_ipv6     TEXT,
+        peer_name     TEXT,
+        peer_ipv4     TEXT,
+        peer_ipv6     TEXT,
         public_key      TEXT,
         preshared_key   TEXT,
         forward_ports   TEXT
@@ -92,7 +92,7 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
     cur.execute("DROP TABLE IF EXISTS os_info;")
     cur.execute("DROP TABLE IF EXISTS server_config;")
     cur.execute("DROP TABLE IF EXISTS wg_config;")
-    cur.execute("DROP TABLE IF EXISTS peers;")
+    cur.execute("DROP TABLE IF EXISTS wg_peer_config;")
     cur.execute("DROP TABLE IF EXISTS install_status;")
 
     cur.execute(
@@ -140,9 +140,9 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
             """
             CREATE TABLE wg_peer_config (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                client_name     TEXT,
-                client_ipv4     TEXT,
-                client_ipv6     TEXT,
+                peer_name     TEXT,
+                peer_ipv4     TEXT,
+                peer_ipv6     TEXT,
                 public_key      TEXT,
                 preshared_key   TEXT,
                 forward_ports   TEXT
@@ -344,5 +344,71 @@ def update_wg_config(db_conn: sqlite3.Connection, wg_config: WGConfig) -> None:
             wg_config.wg_listen_port,
             wg_config.wg_private_key,
             wg_config.wg_public_key,
+        ),
+    )
+
+
+def read_all_peer_configs(db_conn: sqlite3.Connection) -> list[PeerConfig]:
+    """
+    Read all peer configurations from the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+    Returns:
+        list[PeerConfig]: A list of all peer configurations.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute("SELECT * FROM wg_peer_config;")
+    rows: list[sqlite3.Row] = cur.fetchall()
+    peer_configs: list[PeerConfig] = []
+    for row in rows:
+        peer_configs.append(
+            PeerConfig(
+                peer_name=row["peer_name"],
+                peer_ipv4=row["peer_ipv4"],
+                peer_ipv6=row["peer_ipv6"],
+                public_key=row["public_key"],
+                preshared_key=row["preshared_key"],
+                forward_ports=row["forward_ports"],
+            )
+        )
+    return peer_configs
+
+
+def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> None:
+    """
+    Add a new peer configuration to the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+        peer_config (PeerConfig): The peer configuration data.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    # Make sure peer with same peer_name does not already exist
+    existing_peer = read_all_peer_configs(db_conn)
+    if any(p.peer_name == peer_config.peer_name for p in existing_peer):
+        raise ValueError(
+            f"Peer with client_name '{peer_config.peer_name}' already exists."
+        )
+
+    cur.execute(
+        dedent(
+            """
+            INSERT INTO wg_peer_config (
+                peer_name,
+                peer_ipv4,
+                peer_ipv6,
+                public_key,
+                preshared_key,
+                forward_ports
+            )
+            VALUES (?, ?, ?, ?, ?, ?);
+            """
+        ),
+        (
+            peer_config.peer_name,
+            peer_config.peer_ipv4,
+            peer_config.peer_ipv6,
+            peer_config.public_key,
+            peer_config.preshared_key,
+            peer_config.forward_ports,
         ),
     )

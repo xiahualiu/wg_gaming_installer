@@ -12,6 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
   "psutil>=5.9",
   "prompt_toolkit>=3.0",
+  "distro>=1.8",
 ]
 
 [project.optional-dependencies]
