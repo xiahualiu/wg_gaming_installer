@@ -258,14 +258,14 @@ def is_os_supported(os_id: str, os_version: str) -> bool:
     return True
 
 
-def continue_install(state: str) -> list[Callable[[], None]]:
+def continue_install(state: InstallStatus) -> list[Callable[[], None]]:
     """
     Continue the installation process.
     Returns a list of functions to be executed in order.
     """
-    if state == "not_started":
+    if state == InstallStatus.NOT_STARTED:
         return [db_setup, install_wg_package]
-    elif state == "db_created":
+    elif state == InstallStatus.DB_CREATED:
         return [install_wg_package]
     else:
         return []
@@ -275,6 +275,7 @@ def db_setup() -> None:
     """
     Pre-installation setup tasks.
     """
+    logging.info("Step 1: Setting up configuration database...")
     # Create temporary folder
     temp_folder = script_temp_folder()
     temp_folder.mkdir(parents=True, exist_ok=True)
@@ -289,7 +290,7 @@ def install_wg_package() -> None:
     """
     Main installation function for WireGuard server.
     """
-    logging.info("Starting WireGuard server installation...")
+    logging.info("Step 2: Starting WireGuard server installation...")
 
     # Step 1: Get OS information
     os_id, os_version = get_os_info()
@@ -326,14 +327,12 @@ if __name__ == "__main__":
     # Check if db exists
     logging.info("Checking if configuration database exists...")
     if not server_conf_db_path().exists():
-        server_conf_db_path().parent.mkdir(parents=True, exist_ok=True)
-        with conf_db_connected(db_path=server_conf_db_path()) as conn:
-            create_config_db(conn)
+        db_setup()
 
     # Continue installation from the beginning
     logging.info("Reading installation status from database...")
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        status = read_install_status(conn)
+        status: InstallStatus = read_install_status(conn)
         steps: list[Callable[[], None]] = continue_install(status)
 
     # Execute installation steps
