@@ -42,6 +42,7 @@ class PeerConfig:
 
 class InstallStatus(IntEnum):
     NOT_STARTED = auto()
+    DB_CREATED = auto()
     SW_INSTALLED = auto()
     SERVER_IF_CONFIGURED = auto()
     SERVER_WG_CONFIGURED = auto()
@@ -52,6 +53,11 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
     """
     Create or reset the SQLite database table used to store WireGuard configurations.
     If any table exists it will be dropped and recreated with the schema:
+
+    Table : os_info
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        os_name TEXT,
+        os_version TEXT
 
     Table : server_config
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -83,10 +89,23 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
 
     # Drop existing table if exists and create new one
     cur = db_conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS os_info;")
     cur.execute("DROP TABLE IF EXISTS server_config;")
     cur.execute("DROP TABLE IF EXISTS wg_config;")
     cur.execute("DROP TABLE IF EXISTS peers;")
     cur.execute("DROP TABLE IF EXISTS install_status;")
+
+    cur.execute(
+        dedent(
+            """
+            CREATE TABLE os_info (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                os_name TEXT,
+                os_version TEXT
+            );
+            """
+        )
+    )
 
     cur.execute(
         dedent(
@@ -139,6 +158,7 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                 state TEXT NOT NULL DEFAULT 'not_started'
                 CHECK (state IN (
                     'not_started',
+                    'db_created',
                     'sw_installed',
                     'server_if_configured',
                     'server_wg_configured',

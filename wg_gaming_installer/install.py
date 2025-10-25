@@ -7,13 +7,18 @@ from __future__ import annotations
 import logging
 import random
 import socket
+from collections.abc import Callable
 from pathlib import Path
 
 from prompt_toolkit import prompt
 from shell_scripts import (
     delete_folders,
     get_default_interface,
+    get_os_info,
     ifname_ipv4_ipv6,
+    install_wg_dependencies,
+    install_wireguard_go,
+    need_userspace_wireguard,
     validate_ifname,
     validate_ipv4_address,
     validate_ipv6_address,
@@ -21,10 +26,14 @@ from shell_scripts import (
     wg_gen_keypair,
 )
 from sqlite_scripts import (
+    InstallStatus,
     ServerConfig,
     WGConfig,
     conf_db_connected,
+    create_config_db,
+    read_install_status,
     read_server_config,
+    update_install_status,
     write_server_config,
     write_wg_config,
 )
@@ -212,3 +221,114 @@ def server_wg_conf() -> None:
                 wg_public_key=server_pub,
             ),
         )
+
+
+def is_os_supported(os_id: str, os_version: str) -> bool:
+    """
+    Check if the operating system is supported.
+    """
+    # store minimums as (major, minor) tuples
+    supported_os_min_version: dict[str, tuple[int, int]] = {
+        'ubuntu': (20, 10),  # in-kernel from 20.10 (22.04 recommended)
+        'debian': (11, 0),  # Bullseye
+        'centos': (9, 0),  # CentOS Stream 9 / RHEL 9
+        'rocky': (9, 0),
+        'almalinux': (9, 0),
+        'fedora': (32, 0),
+        'arch': (0, 0),  # rolling
+    }
+
+    os_id_lower = os_id.lower()
+    if os_id_lower not in supported_os_min_version:
+        return False
+
+    os_version_tuple = tuple(int(part) for part in os_version.split('.')[:2])
+
+    if os_id_lower not in supported_os_min_version:
+        logging.error(f"Operating system {os_id_lower} is not supported.")
+        return False
+
+    if os_version_tuple < supported_os_min_version[os_id_lower]:
+        logging.error(
+            f"Detected OS version {os_version_tuple} is lower than the "
+            f"minimum supported version {supported_os_min_version[os_id_lower]} "
+            f"for {os_id_lower}."
+        )
+        return False
+    return True
+
+
+def continue_install(state: str) -> list[Callable[[], None]]:
+    """
+    Continue the installation process.
+    Returns a list of functions to be executed in order.
+    """
+    if state == "not_started":
+        return [db_setup, install_wg_package]
+    elif state == "db_created":
+        return [install_wg_package]
+    else:
+        return []
+
+
+def db_setup() -> None:
+    """
+    Pre-installation setup tasks.
+    """
+    # Create temporary folder
+    temp_folder = script_temp_folder()
+    temp_folder.mkdir(parents=True, exist_ok=True)
+
+    # Create or reset the configuration database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        create_config_db(conn)
+        update_install_status(db_conn=conn, new_state=InstallStatus.DB_CREATED)
+
+
+def install_wg_package() -> None:
+    """
+    Main installation function for WireGuard server.
+    """
+    logging.info("Starting WireGuard server installation...")
+
+    # Step 1: Get OS information
+    os_id, os_version = get_os_info()
+
+    if not is_os_supported(os_id, os_version):
+        raise RuntimeError(f"Operating system {os_id} {os_version} is not supported.")
+
+    logging.info(f"Detected operating system: {os_id} {os_version}")
+
+    # Step 2: Install WireGuard and dependencies
+    logging.info("Installing WireGuard and dependencies...")
+    install_wg_dependencies(os_id, os_version)
+
+    # Check if userspace WireGuard is needed
+    logging.info("Checking if userspace WireGuard is needed...")
+    if need_userspace_wireguard(tun_dev_path()):
+        logging.info(
+            "OS virtualization type requires userspace WireGuard implementation."
+        )
+        prompt("Press Enter to continue with WireGuard-Go installation...")
+        install_wireguard_go()
+
+    # Step 3: update install status in database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        update_install_status(db_conn=conn, new_state=InstallStatus.SW_INSTALLED)
+
+
+if __name__ == "__main__":
+    # Check if db exists
+    logging.info("Checking if configuration database exists...")
+    if not server_conf_db_path().exists():
+        create_config_db(server_conf_db_path())
+
+    # Continue installation from the beginning
+    logging.info("Reading installation status from database...")
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        status = read_install_status(conn)
+        steps: list[Callable[[], None]] = continue_install(status)
+
+    # Execute installation steps
+    for step in steps:
+        step()

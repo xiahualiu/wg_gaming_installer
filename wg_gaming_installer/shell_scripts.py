@@ -5,17 +5,40 @@ Shell script related utility functions for WireGuard gaming installer.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import socket
 import subprocess
+import tempfile
 from pathlib import Path
 from socket import AddressFamily
 from typing import TYPE_CHECKING
 
+import distro
 import psutil
+from prompt_toolkit import prompt
 
 if TYPE_CHECKING:
     from psutil._common import snicaddr
+
+
+def go_path() -> Path:
+    """
+    Return the expected installation path of Go programming language.
+    Returns:
+        Path: The expected installation path of Go. It is $Home/.go/bin/go
+    """
+    return Path.home() / '.go' / 'bin' / 'go'
+
+
+def check_usr_local_bin_on_path() -> bool:
+    """
+    Check if /usr/local/bin is on the system PATH.
+    Returns:
+        bool: True if /usr/local/bin is on PATH, False otherwise.
+    """
+    path_dirs = os.environ.get('PATH', '').split(os.pathsep)
+    return any(Path('/usr/local/bin').resolve() == Path(p).resolve() for p in path_dirs)
 
 
 def delete_folders(folders: list[Path]) -> None:
@@ -54,7 +77,7 @@ def get_virtualization_type() -> str:
     return virt_type
 
 
-def if_userspace_wireguard(tun_dev_path: Path) -> bool:
+def need_userspace_wireguard(tun_dev_path: Path) -> bool:
     """
     Return True if userspace WireGuard (wireguard-go) is required.
     Returns:
@@ -191,3 +214,202 @@ def wg_gen_keypair() -> tuple[str, str]:
     ).stdout.strip()
     assert pub, "Failed to generate WireGuard public key."
     return priv, pub
+
+
+def get_os_info() -> tuple[str, str]:
+    """
+    Retrieve the operating system name and version.
+    Returns:
+        tuple[str, str]: A tuple containing the OS name and version.
+    """
+
+    os_id: str = distro.id()
+    os_version: str = distro.version(pretty=False, best=False)
+    return os_id, os_version
+
+
+def install_wg_dependencies(os_id: str, os_version: str) -> None:
+    """
+    Install kernel WireGuard using the system's package manager.
+    """
+    os_l = os_id.lower()
+    try:
+        if os_l in ['ubuntu', 'debian']:
+            pkgs = [
+                'wireguard-tools',
+                'nftables',
+                'qrencode',
+                'curl',
+                'git',
+                'make',
+                'wget',
+            ]
+            subprocess.run(
+                ['sudo', 'apt-get', 'update'], check=True, capture_output=True
+            )
+            subprocess.run(
+                ['sudo', 'apt-get', 'install', '-y', '--no-install-recommends'] + pkgs,
+                check=True,
+                capture_output=True,
+            )
+            return
+
+        if os_l in ['centos', 'rocky', 'almalinux']:
+            pkgs = ['epel-release', 'elrepo-release']
+            subprocess.run(
+                ['sudo', 'dnf', 'install', '-y'] + pkgs, check=True, capture_output=True
+            )
+            subprocess.run(
+                [
+                    'sudo',
+                    'dnf',
+                    'install',
+                    '-y',
+                    'kmod-wireguard',
+                    'wireguard-tools',
+                    'nftables',
+                    'qrencode',
+                    'curl',
+                    'git',
+                    'make',
+                    'wget',
+                ],
+                check=True,
+                capture_output=True,
+            )
+            return
+
+        if os_l == 'fedora':
+            pkgs = [
+                'wireguard-tools',
+                'nftables',
+                'qrencode',
+                'curl',
+                'git',
+                'make',
+                'wget',
+            ]
+            subprocess.run(
+                ['sudo', 'dnf', 'install', '-y'] + pkgs, check=True, capture_output=True
+            )
+            return
+
+        if os_l == 'arch':
+            pkgs = [
+                'wireguard-tools',
+                'nftables',
+                'qrencode',
+                'curl',
+                'git',
+                'make',
+                'wget',
+            ]
+            # --needed prevents reinstall of already-installed packages
+            subprocess.run(
+                ['sudo', 'pacman', '-Syu', '--noconfirm', '--needed'] + pkgs,
+                check=True,
+                capture_output=True,
+            )
+            return
+
+    except subprocess.CalledProcessError as e:
+        logging.error(
+            f"Failed to install WireGuard and dependencies on {os_id} {os_version}: "
+            f"{e.stderr.decode().strip()}"
+        )
+        raise RuntimeError("WireGuard installation failed.") from e
+
+
+def install_wireguard_go() -> None:
+    """
+    Install userspace WireGuard (wireguard-go).
+    """
+    # Check if /usr/local/bin is on PATH because we will create symlinks there
+    if not check_usr_local_bin_on_path():
+        raise RuntimeError("/usr/local/bin is not on PATH.")
+
+    # Check if wireguard-go is already installed
+    if shutil.which('wireguard') is not None:
+        logging.info("wireguard-go is already installed, skipping installation.")
+        return
+
+    # Check if Go is installed
+    if shutil.which('go') is None:
+        logging.info(
+            "Go not found, installing Go programming language using go-installer."
+        )
+        prompt("Press Enter to continue...")
+
+        # Install Go using go-installer script
+        try:
+            subprocess.run(
+                r"curl -sSL https://git.io/go-installer | bash",
+                shell=True,
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logging.error(
+                f"Failed to install Go programming language: "
+                f"{e.stderr.decode().strip()}"
+            )
+            raise RuntimeError("Go installation failed.") from e
+
+        # Create symlink to /usr/local/bin/go for immediate use
+        try:
+            subprocess.run(
+                ['sudo', 'ln', '-s', go_path(), '/usr/local/bin/go'],
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logging.error(
+                f"Failed to create symlink for Go binary: {e.stderr.decode().strip()}"
+            )
+            raise RuntimeError("Creating Go symlink failed.") from e
+
+    # Verify Go installation again
+    if shutil.which('go') is None:
+        raise RuntimeError("Go command not found after installation.")
+
+    # Clone the wireguard-go repository
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        try:
+            subprocess.run(
+                [
+                    'git',
+                    'clone',
+                    'https://git.zx2c4.com/wireguard-go',
+                    str(tmpdir_path / 'wireguard-go'),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ['make', '-C', str(tmpdir_path / 'wireguard-go')],
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Failed to build wireguard-go: {e.stderr.decode().strip()}")
+            raise RuntimeError("Build wireguard-go failed.") from e
+
+        # Move the wireguard-go binary to /usr/local/bin
+        try:
+            subprocess.run(
+                [
+                    'sudo',
+                    'mv',
+                    str(tmpdir_path / 'wireguard-go' / 'wireguard-go'),
+                    '/usr/local/bin/wireguard-go',
+                ],
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logging.error(
+                f"Failed to move wireguard-go binary to /usr/local/bin: "
+                f"{e.stderr.decode().strip()}"
+            )
+            raise RuntimeError("Moving wireguard-go binary failed.") from e
