@@ -4,7 +4,6 @@ Main installation logic for WireGuard gaming installer.
 
 from __future__ import annotations
 
-import logging
 import os
 import random
 import socket
@@ -131,7 +130,7 @@ def save_wg_server_conf(
     """
     Save the WireGuard configuration file.
     """
-    logging.info(f"Saving WireGuard configuration file to {wg_conf_path}...")
+    print(f"Saving WireGuard configuration file to {wg_conf_path}...")
     if not wg_conf_path.parent.exists():
         wg_conf_path.parent.mkdir(parents=True, exist_ok=True)
     with open(wg_conf_path, 'w') as f:
@@ -173,9 +172,7 @@ def append_wg_server_conf_peer(
     """
     Append a peer configuration to the WireGuard configuration file.
     """
-    logging.info(
-        f"Appending {peer_name} to WireGuard configuration file {wg_conf_path}..."
-    )
+    print(f"Appending {peer_name} to WireGuard configuration file {wg_conf_path}...")
     with open(wg_conf_path, 'a') as f:
         f.write(f"[Peer] # {peer_name}\n")
         f.write(f"PublicKey = {peer_public_key}\n")
@@ -191,9 +188,7 @@ def rm_wg_server_conf_peer(
     """
     Remove a peer configuration from the WireGuard configuration file.
     """
-    logging.info(
-        f"Removing {peer_name} from WireGuard configuration file {wg_conf_path}..."
-    )
+    print(f"Removing {peer_name} from WireGuard configuration file {wg_conf_path}...")
     with open(wg_conf_path, 'r') as f:
         lines = f.readlines()
 
@@ -269,7 +264,7 @@ def server_if_conf() -> None:
             "Input the public interface name: ", default=default_nic_name or ""
         ).strip()
         if not validate_ifname(server_nic_name):
-            logging.warning('Invalid network interface name, please try again.')
+            print('Invalid network interface name, please try again.')
             continue
 
         # Then get server IP addresses
@@ -281,7 +276,7 @@ def server_if_conf() -> None:
             default=default_nic_ipv4 or "",
         ).strip()
         if not validate_ipv4_address(server_nic_ipv4):
-            logging.warning('IPv4 address is required, please try again.')
+            print('IPv4 address is required, please try again.')
             continue
 
         # IPv6 is optional, but if provided must be valid
@@ -290,7 +285,7 @@ def server_if_conf() -> None:
             default=default_nic_ipv6 or "",
         ).strip()
         if server_nic_ipv6 and not validate_ipv6_address(server_nic_ipv6):
-            logging.warning('Invalid IPv6 address, please try again.')
+            print('Invalid IPv6 address, please try again.')
             continue
 
         # All inputs are valid, break the loop
@@ -317,7 +312,7 @@ def server_wg_conf() -> None:
         ).strip()
         # If empty or longer than 15 chars, invalid
         if not wg_nic_name or len(wg_nic_name) > 15:
-            logging.warning('Invalid network interface name, please try again.')
+            print('Invalid network interface name, please try again.')
             continue
         else:
             break
@@ -330,7 +325,7 @@ def server_wg_conf() -> None:
             default=default_wg_ipv4,
         ).strip()
         if not validate_ipv4_address(wg_ipv4):
-            logging.warning("Invalid IPv4 address, please try again.")
+            print("Invalid IPv4 address, please try again.")
             continue
         break
 
@@ -349,13 +344,11 @@ def server_wg_conf() -> None:
                 default=default_wg_ipv6,
             ).strip()
             if not validate_ipv6_address(wg_ipv6):
-                logging.warning("Invalid IPv6 address, please try again.")
+                print("Invalid IPv6 address, please try again.")
                 continue
             break
     else:
-        logging.info(
-            "Skipping IPv6 configuration as server has no IPv6 address configured."
-        )
+        print("Skipping IPv6 configuration as server has no IPv6 address configured.")
 
     while True:
         default_wg_listen_port: int = random.randint(60000, 65535)
@@ -365,19 +358,17 @@ def server_wg_conf() -> None:
         try:
             wg_listen_port: int = int(wg_listen_port_str)
         except ValueError:
-            logging.warning("Invalid port input, please try again.")
+            print("Invalid port input, please try again.")
             continue
         if wg_listen_port < 1 or wg_listen_port > 65535:
-            logging.warning("Invalid port, please try again.")
+            print("Invalid port, please try again.")
             continue
         if not validate_port_not_in_use(
             wg_listen_port, socket.AddressFamily.AF_INET
         ) or not validate_port_not_in_use(
             wg_listen_port, socket.AddressFamily.AF_INET6
         ):
-            logging.warning(
-                f"Port {wg_listen_port} is already in use, please try another port."
-            )
+            print(f"Port {wg_listen_port} is already in use, please try another port.")
             continue
         break
 
@@ -408,7 +399,7 @@ def server_wg_conf() -> None:
         )
 
     # Also start the WireGuard interface now
-    logging.info("Bringing up the WireGuard interface...")
+    print("Bringing up the WireGuard interface...")
     start_wg_service(wg_nic_name)
 
 
@@ -434,14 +425,15 @@ def is_os_supported(os_id: str, os_version: str) -> bool:
     os_version_tuple = tuple(int(part) for part in os_version.split('.')[:2])
 
     if os_id_lower not in supported_os_min_version:
-        logging.error(f"Operating system {os_id_lower} is not supported.")
+        print(f"Operating system {os_id_lower} is not supported.", file=sys.stderr)
         return False
 
     if os_version_tuple < supported_os_min_version[os_id_lower]:
-        logging.error(
+        print(
             f"Detected OS version {os_version_tuple} is lower than the "
             f"minimum supported version {supported_os_min_version[os_id_lower]} "
-            f"for {os_id_lower}."
+            f"for {os_id_lower}.",
+            file=sys.stderr,
         )
         return False
     return True
@@ -469,7 +461,7 @@ def continue_install(state: InstallStatus) -> list[Callable[[], None]]:
     elif state == InstallStatus.SERVER_IF_CONFIGURED:
         return full_install_steps[3:]
     elif state == InstallStatus.SERVER_WG_CONFIGURED:
-        logging.info("Installation already completed. No further action needed.")
+        print("Installation already completed. No further action needed.")
         return []
     else:
         raise RuntimeError("Unknown installation state.")
@@ -479,7 +471,7 @@ def db_setup() -> None:
     """
     Pre-installation setup tasks.
     """
-    logging.info("Step 1: Setting up configuration database...")
+    print("Step 1: Setting up configuration database...")
 
     # Create temporary folder
     temp_folder = script_temp_folder()
@@ -495,7 +487,7 @@ def db_setup_failure_cleanup() -> None:
     """
     Cleanup tasks in case of database setup failure.
     """
-    logging.info("Cleaning up after database setup failure...")
+    print("Cleaning up after database setup failure...")
     uninstall_delete_folders()
 
 
@@ -503,7 +495,7 @@ def install_wg_package() -> None:
     """
     Main installation function for WireGuard server.
     """
-    logging.info("Step 2: Starting WireGuard server installation...")
+    print("Step 2: Starting WireGuard server installation...")
 
     # Step 1: Get OS information
     os_id, os_version = get_os_info()
@@ -511,22 +503,20 @@ def install_wg_package() -> None:
     if not is_os_supported(os_id, os_version):
         raise RuntimeError(f"Operating system {os_id} {os_version} is not supported.")
 
-    logging.info(f"Detected operating system: {os_id} {os_version}")
+    print(f"Detected operating system: {os_id} {os_version}")
 
     # Step 2: Install WireGuard and dependencies
-    logging.info("Installing WireGuard and dependencies...")
+    print("Installing WireGuard and dependencies...")
     install_wg_dependencies(os_id, os_version)
 
     # Check if userspace WireGuard is needed
-    logging.info("Checking if userspace WireGuard is needed...")
+    print("Checking if userspace WireGuard is needed...")
     if need_userspace_wireguard(tun_dev_path()):
-        logging.info(
-            "OS virtualization type requires userspace WireGuard implementation."
-        )
+        print("OS virtualization type requires userspace WireGuard implementation.")
         prompt("Press Enter to continue with WireGuard-Go installation...")
         install_wireguard_go()
     else:
-        logging.info("In-kernel WireGuard implementation is supported.")
+        print("In-kernel WireGuard implementation is supported.")
 
     # Step 3: update install status in database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
@@ -534,19 +524,13 @@ def install_wg_package() -> None:
 
 
 if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-    )
-
     # Check if db exists
-    logging.info("Checking if configuration database exists...")
+    print("Checking if configuration database exists...")
     if not server_conf_db_path().exists():
         db_setup()
 
     # Continue installation from the beginning
-    logging.info("Reading installation status from database...")
+    print("Reading installation status from database...")
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
         status: InstallStatus = read_install_status(conn)
         steps: list[Callable[[], None]] = continue_install(status)

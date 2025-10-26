@@ -4,11 +4,11 @@ Shell script related utility functions for WireGuard gaming installer.
 
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from socket import AddressFamily
@@ -49,7 +49,7 @@ def delete_folders(folders: list[Path]) -> None:
     """
     for folder in folders:
         if not folder.exists():
-            logging.warning(f"Folder {folder} does not exist, skipping deletion.")
+            print(f"Folder {folder} does not exist, skipping deletion.")
             continue
         folder = folder.resolve()
         if folder.is_dir():
@@ -68,7 +68,7 @@ def get_virtualization_type() -> str:
         str: The type of virtualization, or 'none' if not virtualized.
     """
     if shutil.which('systemd-detect-virt') is None:
-        logging.warning("systemd-detect-virt not found, assuming no virtualization.")
+        print("systemd-detect-virt not found, assuming no virtualization.")
         return 'none'
 
     virt_type: str = subprocess.run(
@@ -88,7 +88,7 @@ def need_userspace_wireguard(tun_dev_path: Path) -> bool:
 
     virt_type: str = get_virtualization_type()
     if virt_type in ('openvz', 'lxc', 'lxd'):
-        logging.info(
+        print(
             f"Detected virtualization type: {virt_type}. "
             "Userspace WireGuard is required."
         )
@@ -98,9 +98,7 @@ def need_userspace_wireguard(tun_dev_path: Path) -> bool:
                 "cannot proceed with userspace WireGuard installation."
             )
         else:
-            logging.info(
-                "TUN device found. Proceeding with userspace WireGuard installation."
-            )
+            print("TUN device found. Proceeding with userspace WireGuard installation.")
         return True
     return False
 
@@ -324,18 +322,16 @@ def install_wireguard_go() -> None:
 
     # Check if wireguard-go is already installed
     if shutil.which('wireguard') is not None:
-        logging.info("wireguard-go is already installed, skipping installation.")
+        print("wireguard-go is already installed, skipping installation.")
         return
 
     # Check if Go is installed
     if shutil.which('go') is None:
-        logging.info(
-            "Go not found, installing Go programming language using go-installer."
-        )
+        print("Go not found, installing Go programming language using go-installer.")
         prompt("Press Enter to continue...")
-        logging.info(
-            "Installing latest Go compiler... "
-            "It could take several minutes. Please wait."
+        print(
+            "Installing latest Go compiler..."
+            " It could take several minutes. Please wait."
         )
 
         # Install Go using go-installer script
@@ -347,9 +343,10 @@ def install_wireguard_go() -> None:
                 capture_output=True,
             )
         except subprocess.CalledProcessError as e:
-            logging.error(
-                f"Failed to install Go programming language: "
-                f"{e.stderr.decode().strip()}"
+            print(
+                "Failed to install Go programming language: "
+                f"{e.stderr.decode().strip()}",
+                file=sys.stderr,
             )
             raise RuntimeError("Go installation failed.") from e
 
@@ -361,8 +358,9 @@ def install_wireguard_go() -> None:
                 capture_output=True,
             )
         except subprocess.CalledProcessError as e:
-            logging.error(
-                f"Failed to create symlink for Go binary: {e.stderr.decode().strip()}"
+            print(
+                f"Failed to create symlink for Go binary: {e.stderr.decode().strip()}",
+                file=sys.stderr,
             )
             raise RuntimeError("Creating Go symlink failed.") from e
 
@@ -390,7 +388,10 @@ def install_wireguard_go() -> None:
                 capture_output=True,
             )
         except subprocess.CalledProcessError as e:
-            logging.error(f"Failed to build wireguard-go: {e.stderr.decode().strip()}")
+            print(
+                f"Failed to build wireguard-go: {e.stderr.decode().strip()}",
+                file=sys.stderr,
+            )
             raise RuntimeError("Build wireguard-go failed.") from e
 
         # Move the wireguard-go binary to /usr/local/bin
@@ -406,9 +407,10 @@ def install_wireguard_go() -> None:
                 capture_output=True,
             )
         except subprocess.CalledProcessError as e:
-            logging.error(
-                f"Failed to move wireguard-go binary to /usr/local/bin: "
-                f"{e.stderr.decode().strip()}"
+            print(
+                "Failed to move wireguard-go binary to /usr/local/bin:"
+                f"{e.stderr.decode().strip()}",
+                file=sys.stderr,
             )
             raise RuntimeError("Moving wireguard-go binary failed.") from e
 
@@ -417,7 +419,7 @@ def enable_forwarding_sysctl() -> None:
     """
     Enable IP forwarding for both IPv4 and IPv6.
     """
-    logging.info("Set sysctl to allow IP forwarding")
+    print("Set sysctl to allow IP forwarding")
 
     subprocess.run(
         ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=1'],
@@ -435,7 +437,7 @@ def disable_forwarding_sysctl() -> None:
     """
     Disable IP forwarding for both IPv4 and IPv6.
     """
-    logging.info("Unset sysctl to disable IP forwarding")
+    print("Unset sysctl to disable IP forwarding")
 
     subprocess.run(
         ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
@@ -453,7 +455,7 @@ def start_wg_service(wg_nic_name: str) -> None:
     """
     Start and enable the WireGuard service.
     """
-    logging.info("Starting and enabling WireGuard service")
+    print("Starting and enabling WireGuard service")
 
     subprocess.run(
         ['systemctl', 'enable', '--now', f'wg-quick@{wg_nic_name}'],
@@ -466,7 +468,7 @@ def stop_wg_service(wg_nic_name: str) -> None:
     """
     Stop and disable the WireGuard service.
     """
-    logging.info("Stopping and disabling WireGuard service")
+    print("Stopping and disabling WireGuard service")
 
     subprocess.run(
         ['systemctl', 'disable', '--now', f'wg-quick@{wg_nic_name}'],
