@@ -5,6 +5,7 @@ Main installation logic for WireGuard gaming installer.
 from __future__ import annotations
 
 import logging
+import os
 import random
 import socket
 import sys
@@ -139,13 +140,19 @@ def save_wg_server_conf(
             f.write(f"Address = {wg_ipv4}/24\n")
         f.write(f"ListenPort = {wg_listen_port}\n")
         f.write(f"PrivateKey = {wg_private_key}\n")
+
+        # prefer the virtualenv python if VIRTUAL_ENV is set
+        if 'VIRTUAL_ENV' in os.environ:
+            python_bin = (Path(os.environ['VIRTUAL_ENV']) / 'bin' / 'python').resolve()
+        else:
+            python_bin = Path(sys.executable).resolve()
+
         f.write(
-            f"PostUp = {Path(sys.executable).resolve()} "
-            f"{Path(__file__).resolve().parent}/wg_start.sh\n"
+            f"PostUp = {python_bin} " f"{Path(__file__).resolve().parent}/wg_start.py\n"
         )
         f.write(
-            f"PostDown = {Path(sys.executable).resolve()} "
-            f"{Path(__file__).resolve().parent}/wg_stop.sh\n"
+            f"PostDown = {python_bin} "
+            f"{Path(__file__).resolve().parent}/wg_stop.py\n"
         )
         f.write("SaveConfig = false\n")
         f.write("\n")
