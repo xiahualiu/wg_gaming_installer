@@ -145,7 +145,7 @@ def save_wg_server_conf(
 
         # prefer the virtualenv python if VIRTUAL_ENV is set
         if 'VIRTUAL_ENV' in os.environ:
-            python_bin = (Path(os.environ['VIRTUAL_ENV']) / 'bin' / 'python').resolve()
+            python_bin = Path(os.environ['VIRTUAL_ENV']) / 'bin' / 'python'
         else:
             python_bin = Path(sys.executable).resolve()
 
