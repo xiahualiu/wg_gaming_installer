@@ -80,8 +80,8 @@ nft.cmd(
 
 # Set MASQUERADE for outbound traffic on wg0 interface (both IPv4 and IPv6)
 nft.cmd('add table ip nat')
-nft.cmd('add chain ip nat postrouting { type nat hook postrouting priority 100 ; }')
-nft.cmd(f'add rule ip nat postrouting oif {wg_cfg.wg_nic_name} masquerade')
+nft.cmd('add chain ip nat postrouting { type nat hook postrouting priority srcnat ; }')
+nft.cmd(f'add rule ip nat postrouting oif {server_cfg.server_nic_name} masquerade')
 
 # Add DNAT rules for each peer
 for peer in peer_cfgs:
@@ -100,9 +100,9 @@ for peer in peer_cfgs:
 if len(server_cfg.server_ipv6) > 0:
     nft.cmd('add table ip6 nat')
     nft.cmd(
-        'add chain ip6 nat postrouting { type nat hook postrouting priority 100 ; }'
+        'add chain ip6 nat postrouting { type nat hook postrouting priority srcnat ; }'
     )
-    nft.cmd(f'add rule ip6 nat postrouting oif {wg_cfg.wg_nic_name} masquerade')
+    nft.cmd(f'add rule ip6 nat postrouting oif {server_cfg.server_nic_name} masquerade')
     # Add DNAT rules for each peer (IPv6)
     for peer in peer_cfgs:
         if len(peer.peer_ipv6) > 0:
