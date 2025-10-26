@@ -132,6 +132,8 @@ def save_wg_server_conf(
     Save the WireGuard configuration file.
     """
     logging.info(f"Saving WireGuard configuration file to {wg_conf_path}...")
+    if not wg_conf_path.parent.exists():
+        wg_conf_path.parent.mkdir(parents=True, exist_ok=True)
     with open(wg_conf_path, 'w') as f:
         f.write("[Interface]\n")
         if wg_ipv6:
