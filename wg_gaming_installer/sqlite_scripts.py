@@ -7,10 +7,17 @@ from __future__ import annotations
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from enum import IntEnum, auto
+from enum import Enum, IntEnum, auto
 from pathlib import Path
 from textwrap import dedent
 from typing import Generator
+
+
+@dataclass(frozen=True, slots=True)
+class OSInfo:
+    os_name: str
+    os_version: str
+    userspace_wg: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +37,11 @@ class WGConfig:
     wg_public_key: str
 
 
+class WGForwardPortEnum(Enum):
+    SINGLE: int
+    RANGE: tuple[int, int]
+
+
 @dataclass(frozen=True, slots=True)
 class PeerConfig:
     peer_name: str
@@ -37,7 +49,18 @@ class PeerConfig:
     peer_ipv6: str
     public_key: str
     preshared_key: str
-    forward_ports: str
+    forward_ports: list[WGForwardPortEnum]
+
+    def forward_ports_str(self) -> str:
+        ports_str_list: list[str] = []
+        for port in self.forward_ports:
+            if isinstance(port, WGForwardPortEnum) and port == WGForwardPortEnum.SINGLE:
+                ports_str_list.append(str(port.value))
+            elif (
+                isinstance(port, WGForwardPortEnum) and port == WGForwardPortEnum.RANGE
+            ):
+                ports_str_list.append(f"{port.value[0]}-{port.value[1]}")
+        return ",".join(ports_str_list)
 
 
 class InstallStatus(IntEnum):
@@ -46,7 +69,6 @@ class InstallStatus(IntEnum):
     SW_INSTALLED = auto()
     SERVER_IF_CONFIGURED = auto()
     SERVER_WG_CONFIGURED = auto()
-    PEERS_CONFIGURED = auto()
 
 
 def create_config_db(db_conn: sqlite3.Connection) -> None:
@@ -63,7 +85,8 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
         id INTEGER PRIMARY KEY CHECK (id = 1),
         server_nic_name TEXT,
         server_ipv4     TEXT,
-        server_ipv6     TEXT
+        server_ipv6     TEXT,
+        userspace_wg    BOOLEAN
 
     Table : wg_server_config
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -101,7 +124,8 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
             CREATE TABLE os_info (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 os_name TEXT,
-                os_version TEXT
+                os_version TEXT,
+                userspace_wg BOOLEAN
             );
             """
         )
@@ -114,7 +138,7 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 server_nic_name TEXT,
                 server_ipv4     TEXT,
-                server_ipv6     TEXT
+                server_ipv6     TEXT,
             );
             """
         )
@@ -246,6 +270,50 @@ def update_install_status(
     )
 
 
+def read_os_info(db_conn: sqlite3.Connection) -> OSInfo | None:
+    """
+    Read the OS information from the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+    Returns:
+        OSInfo | None: The OS information if set, otherwise None.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute("SELECT * FROM os_info WHERE id = 1;")
+    row: sqlite3.Row | None = cur.fetchone()
+    if row:
+        return OSInfo(
+            os_name=row["os_name"],
+            os_version=row["os_version"],
+            userspace_wg=bool(row["userspace_wg"]),
+        )
+    return None
+
+
+def update_os_info(db_conn: sqlite3.Connection, os_info: OSInfo) -> None:
+    """
+    Update the OS information in the database.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+        os_info (OSInfo): The OS information data.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute(
+        dedent(
+            """
+            REPLACE INTO os_info
+            (id, os_name, os_version, userspace_wg)
+            VALUES (1, ?, ?, ?);
+            """
+        ),
+        (
+            os_info.os_name,
+            os_info.os_version,
+            int(os_info.userspace_wg),
+        ),
+    )
+
+
 def read_server_config(db_conn: sqlite3.Connection) -> ServerConfig | None:
     """
     Read the server configuration from the database.
@@ -279,7 +347,8 @@ def update_server_config(
     cur.execute(
         dedent(
             """
-            REPLACE INTO server_config (id, server_nic_name, server_ipv4, server_ipv6)
+            REPLACE INTO server_config
+            (id, server_nic_name, server_ipv4, server_ipv6, userspace_wg)
             VALUES (1, ?, ?, ?);
             """
         ),

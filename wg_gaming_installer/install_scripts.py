@@ -10,17 +10,23 @@ import socket
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from time import sleep
 
 from prompt_toolkit import prompt
 from shell_scripts import (
+    ServiceStatus,
     delete_folders,
     get_default_interface,
     get_os_info,
+    get_wg_service_status,
     ifname_ipv4_ipv6,
     install_wg_dependencies,
     install_wireguard_go,
     need_userspace_wireguard,
+    restart_wg_service,
     start_wg_service,
+    stop_wg_service,
+    uninstall_wireguard_go,
     validate_ifname,
     validate_ipv4_address,
     validate_ipv6_address,
@@ -29,6 +35,7 @@ from shell_scripts import (
 )
 from sqlite_scripts import (
     InstallStatus,
+    OSInfo,
     PeerConfig,
     ServerConfig,
     WGConfig,
@@ -36,9 +43,13 @@ from sqlite_scripts import (
     conf_db_connected,
     create_config_db,
     delete_peer_config,
+    read_all_peer_configs,
     read_install_status,
+    read_os_info,
     read_server_config,
+    read_wg_config,
     update_install_status,
+    update_os_info,
     update_server_config,
     update_wg_config,
 )
@@ -301,6 +312,9 @@ def server_if_conf() -> None:
                 server_ipv6=server_nic_ipv6,
             ),
         )
+        update_install_status(
+            db_conn=conn, new_state=InstallStatus.SERVER_IF_CONFIGURED
+        )
 
 
 def server_wg_conf() -> None:
@@ -397,6 +411,9 @@ def server_wg_conf() -> None:
                 wg_public_key=server_pub,
             ),
         )
+        update_install_status(
+            db_conn=conn, new_state=InstallStatus.SERVER_WG_CONFIGURED
+        )
 
     # Also start the WireGuard interface now
     print("Bringing up the WireGuard interface...")
@@ -447,7 +464,7 @@ def continue_install(state: InstallStatus) -> list[Callable[[], None]]:
 
     full_install_steps: list[Callable[[], None]] = [
         db_setup,
-        install_wg_package,
+        install_wg_packages,
         server_if_conf,
         server_wg_conf,
     ]
@@ -461,7 +478,6 @@ def continue_install(state: InstallStatus) -> list[Callable[[], None]]:
     elif state == InstallStatus.SERVER_IF_CONFIGURED:
         return full_install_steps[3:]
     elif state == InstallStatus.SERVER_WG_CONFIGURED:
-        print("Installation already completed. No further action needed.")
         return []
     else:
         raise RuntimeError("Unknown installation state.")
@@ -491,7 +507,7 @@ def db_setup_failure_cleanup() -> None:
     uninstall_delete_folders()
 
 
-def install_wg_package() -> None:
+def install_wg_packages() -> None:
     """
     Main installation function for WireGuard server.
     """
@@ -511,7 +527,8 @@ def install_wg_package() -> None:
 
     # Check if userspace WireGuard is needed
     print("Checking if userspace WireGuard is needed...")
-    if need_userspace_wireguard(tun_dev_path()):
+    userspace_wg: bool = need_userspace_wireguard(tun_dev_path())
+    if userspace_wg:
         print("OS virtualization type requires userspace WireGuard implementation.")
         prompt("Press Enter to continue with WireGuard-Go installation...")
         install_wireguard_go()
@@ -520,7 +537,155 @@ def install_wg_package() -> None:
 
     # Step 3: update install status in database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        update_os_info(
+            db_conn=conn,
+            os_info=OSInfo(
+                os_name=os_id,
+                os_version=os_version,
+                userspace_wg=userspace_wg,
+            ),
+        )
         update_install_status(db_conn=conn, new_state=InstallStatus.SW_INSTALLED)
+
+
+def main_menu() -> None:
+    """
+    Show the main menu after installation.
+    """
+
+    # Load config from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        os_info: OSInfo | None = read_os_info(conn)
+        wg_config: WGConfig | None = read_wg_config(conn)
+        server_config: ServerConfig | None = read_server_config(conn)
+        peer_configs: list[PeerConfig] = read_all_peer_configs(conn)
+
+        if not os_info:
+            print("OS information not found in database.", file=sys.stderr)
+            return
+
+        if not wg_config:
+            print("WireGuard configuration not found in database.", file=sys.stderr)
+            return
+
+        if not server_config:
+            print("Server configuration not found in database.", file=sys.stderr)
+            return
+
+    print("Welcome to the WireGuard Gaming Installer main menu!")
+    print("1. Stop WireGuard service (and disable on OS start up).")
+    print("2. Start WireGuard service (and enable on OS start up).")
+    print("3. Restart WireGuard service.")
+    print("4. Uninstall WireGuard service.")
+    print("5. List all peers.")
+    print("6. Add a new peer.")
+    print("7. Remove a peer.")
+    print("8. Exit.")
+
+    user_input: int
+    while True:
+        user_input = prompt("Please select an option from the menu. [1-8]")
+        if user_input not in [1, 2, 3, 4, 5, 6, 7, 8]:
+            print("Invalid option, please try again.")
+            continue
+        break
+
+    # Handle user input
+    if user_input == 1:
+        print("Stopping WireGuard service...")
+        stop_wg_service(wg_config.wg_nic_name)
+        sleep(3)
+
+        # Verify service is inactive
+        assert (
+            get_wg_service_status(wg_config.wg_nic_name) == ServiceStatus.INACTIVE
+        ), "Failed to stop WireGuard service."
+        print("WireGuard service stopped successfully.")
+        return
+
+    if user_input == 2:
+        print("Starting WireGuard service...")
+        start_wg_service(wg_config.wg_nic_name)
+        sleep(3)
+
+        # Verify service is active
+        assert (
+            get_wg_service_status(wg_config.wg_nic_name) == ServiceStatus.ACTIVE
+        ), "Failed to start WireGuard service."
+        print("WireGuard service started successfully.")
+        return
+
+    if user_input == 3:
+        print("Restarting WireGuard service...")
+        restart_wg_service(wg_config.wg_nic_name)
+        sleep(3)
+
+        # Verify service is active
+        assert (
+            get_wg_service_status(wg_config.wg_nic_name) == ServiceStatus.ACTIVE
+        ), "Failed to restart WireGuard service."
+        print("WireGuard service restarted successfully.")
+        return
+
+    if user_input == 4:
+        print("Uninstalling WireGuard service...")
+        while True:
+            confirm = (
+                prompt(
+                    "Are you sure you want to uninstall WireGuard service? "
+                    "This action cannot be undone. (yes/no): "
+                )
+                .strip()
+                .lower()
+            )
+            if confirm not in ['yes', 'no', 'y', 'n']:
+                print("Invalid input, please enter 'yes' or 'no'.")
+                continue
+            break
+        if confirm in ['no', 'n']:
+            print("Uninstallation cancelled.")
+            return
+
+        # Stop WireGuard service
+        stop_wg_service(wg_config.wg_nic_name)
+
+        # If userspace WireGuard was installed, remove it
+        if os_info.userspace_wg:
+            print("Removing wireguard-go...")
+            uninstall_wireguard_go()
+
+        # Uninstall dependencies
+        print("Removing WireGuard dependencies...")
+        install_wg_dependencies(os_id=os_info.os_name, os_version=os_info.os_version)
+
+        # Delete configuration folders and files
+        uninstall_delete_folders()
+        print("WireGuard service uninstalled successfully.")
+        return
+
+    if user_input == 5:
+        print("Listing all peers...")
+        for peer in peer_configs:
+            print(f"Peer Name: {peer.peer_name}")
+            print(f"├─ IPv4: {peer.peer_ipv4}")
+            print(f"├─ IPv6: {peer.peer_ipv6}")
+            print(f"└─ Forwarded Ports: {peer.forward_ports_str()}")
+            print("")
+        return
+
+    if user_input == 6:
+        print("Adding a new peer...")
+        print("Feature not yet implemented.")
+        return
+
+    if user_input == 7:
+        print("Removing a peer...")
+        print("Feature not yet implemented.")
+        return
+
+    if user_input == 8:
+        print("Exiting main menu.")
+        return
 
 
 if __name__ == "__main__":
@@ -538,3 +703,8 @@ if __name__ == "__main__":
     # Execute installation steps
     for step in steps:
         step()
+
+    print("Installation completed successfully.")
+
+    # Show main menu
+    main_menu()

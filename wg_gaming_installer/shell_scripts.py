@@ -10,6 +10,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+from enum import IntEnum, auto
 from pathlib import Path
 from socket import AddressFamily
 from typing import TYPE_CHECKING
@@ -20,6 +21,16 @@ from prompt_toolkit import prompt
 
 if TYPE_CHECKING:
     from psutil._common import snicaddr
+
+
+class ServiceStatus(IntEnum):
+    ACTIVE = auto()
+    INACTIVE = auto()
+    ACTIVATING = auto()
+    DEACTIVATING = auto()
+    FAILED = auto()
+    RELOADING = auto()
+    UNKNOWN = auto()
 
 
 def go_path() -> Path:
@@ -312,6 +323,86 @@ def install_wg_dependencies(os_id: str, os_version: str) -> None:
         return
 
 
+def uninstall_wg_dependencies(os_id: str, os_version: str) -> None:
+    """
+    Uninstall kernel WireGuard using the system's package manager.
+    """
+    os_l = os_id.lower()
+    if os_l in ['ubuntu', 'debian']:
+        pkgs = [
+            'wireguard-tools',
+            'nftables',
+            'python3-nftables',
+            'qrencode',
+            'curl',
+            'git',
+            'make',
+            'wget',
+        ]
+        subprocess.run(
+            ['sudo', 'apt-get', 'autoremove', '-y'] + pkgs,
+            check=True,
+            capture_output=True,
+        )
+        return
+
+    if os_l in ['centos', 'rocky', 'almalinux']:
+        pkgs = [
+            'kmod-wireguard',
+            'wireguard-tools',
+            'nftables',
+            'python3-nftables',
+            'qrencode',
+            'curl',
+            'git',
+            'make',
+            'wget',
+        ]
+        # prefer autoremove to clean up orphaned deps
+        subprocess.run(
+            ['sudo', 'dnf', 'autoremove', '-y'] + pkgs,
+            check=True,
+            capture_output=True,
+        )
+        return
+
+    if os_l == 'fedora':
+        pkgs = [
+            'wireguard-tools',
+            'nftables',
+            'python3-nftables',
+            'qrencode',
+            'curl',
+            'git',
+            'make',
+            'wget',
+        ]
+        subprocess.run(
+            ['sudo', 'dnf', 'autoremove', '-y'] + pkgs,
+            check=True,
+            capture_output=True,
+        )
+        return
+
+    if os_l == 'arch':
+        pkgs = [
+            'wireguard-tools',
+            'nftables',
+            'python-nftables',
+            'qrencode',
+            'curl',
+            'git',
+            'make',
+            'wget',
+        ]
+        subprocess.run(
+            ['sudo', 'pacman', '-Rns', '--noconfirm'] + pkgs,
+            check=True,
+            capture_output=True,
+        )
+        return
+
+
 def install_wireguard_go() -> None:
     """
     Install userspace WireGuard (wireguard-go).
@@ -368,7 +459,7 @@ def install_wireguard_go() -> None:
     if shutil.which('go') is None:
         raise RuntimeError("Go command not found after installation.")
 
-    # Clone the wireguard-go repository
+    # Clone the wireguard-go repository to a temporary directory and build it
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         try:
@@ -387,15 +478,6 @@ def install_wireguard_go() -> None:
                 check=True,
                 capture_output=True,
             )
-        except subprocess.CalledProcessError as e:
-            print(
-                f"Failed to build wireguard-go: {e.stderr.decode().strip()}",
-                file=sys.stderr,
-            )
-            raise RuntimeError("Build wireguard-go failed.") from e
-
-        # Move the wireguard-go binary to /usr/local/bin
-        try:
             subprocess.run(
                 [
                     'sudo',
@@ -406,13 +488,30 @@ def install_wireguard_go() -> None:
                 check=True,
                 capture_output=True,
             )
+            return
         except subprocess.CalledProcessError as e:
             print(
-                "Failed to move wireguard-go binary to /usr/local/bin:"
+                "Failed to build or move wireguard-go binary: "
                 f"{e.stderr.decode().strip()}",
                 file=sys.stderr,
             )
-            raise RuntimeError("Moving wireguard-go binary failed.") from e
+    raise RuntimeError("wireguard-go installation failed.")
+
+
+def uninstall_wireguard_go() -> None:
+    """
+    Uninstall userspace WireGuard (wireguard-go).
+    """
+    wg_go_path = Path('/usr/local/bin/wireguard-go')
+    if wg_go_path.exists():
+        subprocess.run(
+            ['sudo', 'rm', '-f', str(wg_go_path)],
+            check=True,
+            capture_output=True,
+        )
+        print("wireguard-go uninstalled successfully.")
+    else:
+        print("wireguard-go is not installed, skipping uninstallation.")
 
 
 def enable_forwarding_sysctl() -> None:
@@ -464,6 +563,19 @@ def start_wg_service(wg_nic_name: str) -> None:
     )
 
 
+def restart_wg_service(wg_nic_name: str) -> None:
+    """
+    Restart the WireGuard service.
+    """
+    print("Restarting WireGuard service")
+
+    subprocess.run(
+        ['systemctl', 'restart', f'wg-quick@{wg_nic_name}'],
+        check=True,
+        capture_output=True,
+    )
+
+
 def stop_wg_service(wg_nic_name: str) -> None:
     """
     Stop and disable the WireGuard service.
@@ -475,3 +587,36 @@ def stop_wg_service(wg_nic_name: str) -> None:
         check=True,
         capture_output=True,
     )
+
+
+def get_wg_service_status(wg_nic_name: str) -> ServiceStatus:
+    """
+    Get the status of the WireGuard service and return a ServiceStatus enum.
+    Possible returned values: ACTIVE, INACTIVE, ACTIVATING, DEACTIVATING,
+    FAILED, RELOADING, UNKNOWN.
+    """
+    if shutil.which('systemctl') is None:
+        print("systemctl not found, cannot get service status.", file=sys.stderr)
+        return ServiceStatus.UNKNOWN
+
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-active', f'wg-quick@{wg_nic_name}'],
+            capture_output=True,
+            text=True,
+        )
+    except Exception as e:
+        print(f"Failed to run systemctl: {e}", file=sys.stderr)
+        return ServiceStatus.UNKNOWN
+
+    status = result.stdout.strip().lower()
+    mapping = {
+        'active': ServiceStatus.ACTIVE,
+        'inactive': ServiceStatus.INACTIVE,
+        'activating': ServiceStatus.ACTIVATING,
+        'deactivating': ServiceStatus.DEACTIVATING,
+        'failed': ServiceStatus.FAILED,
+        'reloading': ServiceStatus.RELOADING,
+        'unknown': ServiceStatus.UNKNOWN,
+    }
+    return mapping.get(status, ServiceStatus.UNKNOWN)
