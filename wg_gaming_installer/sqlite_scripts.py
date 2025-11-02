@@ -348,7 +348,7 @@ def update_server_config(
         dedent(
             """
             REPLACE INTO server_config
-            (id, server_nic_name, server_ipv4, server_ipv6, userspace_wg)
+            (id, server_nic_name, server_ipv4, server_ipv6)
             VALUES (1, ?, ?, ?);
             """
         ),
