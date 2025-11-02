@@ -1,0 +1,10 @@
+psutil>=5.9
+prompt_toolkit>=3.0
+distro>=1.8.0
+black>=24.0
+isort>=5.12
+flake8>=6.0
+mypy>=1.9
+pytest>=7.0
+pylint>=4.0
+pre-commit>=3.4

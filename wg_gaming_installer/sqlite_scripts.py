@@ -138,7 +138,7 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 server_nic_name TEXT,
                 server_ipv4     TEXT,
-                server_ipv6     TEXT,
+                server_ipv6     TEXT
             );
             """
         )
