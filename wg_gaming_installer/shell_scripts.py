@@ -549,6 +549,16 @@ def disable_forwarding_sysctl() -> None:
         capture_output=True,
     )
 
+    # Reload sysctl configuration files so persisted settings take effect
+    try:
+        subprocess.run(['sudo', 'sysctl', '--system'], check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(
+            f"Failed to reload sysctl configs: {e.stderr.decode().strip()}",
+            file=sys.stderr,
+        )
+        raise
+
 
 def start_wg_service(wg_nic_name: str) -> None:
     """
@@ -561,6 +571,11 @@ def start_wg_service(wg_nic_name: str) -> None:
         check=True,
         capture_output=True,
     )
+
+    # Verify service started successfully
+    status = get_wg_service_status(wg_nic_name)
+    if status != ServiceStatus.ACTIVE:
+        raise RuntimeError("Failed to start WireGuard service.")
 
 
 def restart_wg_service(wg_nic_name: str) -> None:
@@ -575,6 +590,10 @@ def restart_wg_service(wg_nic_name: str) -> None:
         capture_output=True,
     )
 
+    status = get_wg_service_status(wg_nic_name)
+    if status != ServiceStatus.ACTIVE:
+        raise RuntimeError("Failed to restart WireGuard service.")
+
 
 def stop_wg_service(wg_nic_name: str) -> None:
     """
@@ -587,6 +606,10 @@ def stop_wg_service(wg_nic_name: str) -> None:
         check=True,
         capture_output=True,
     )
+
+    status = get_wg_service_status(wg_nic_name)
+    if status != ServiceStatus.INACTIVE:
+        raise RuntimeError("Failed to stop WireGuard service.")
 
 
 def get_wg_service_status(wg_nic_name: str) -> ServiceStatus:
