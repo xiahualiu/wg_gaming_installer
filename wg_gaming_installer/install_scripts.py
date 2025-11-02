@@ -585,13 +585,18 @@ def main_menu() -> None:
     user_input: int
     while True:
         user_input = prompt("Please select an option from the menu. [1-8]")
-        if user_input not in [1, 2, 3, 4, 5, 6, 7, 8]:
+        try:
+            user_selection = int(user_input)
+        except ValueError:
+            print("Invalid input, please enter a number between 1 and 8.")
+            continue
+        if user_selection not in [1, 2, 3, 4, 5, 6, 7, 8]:
             print("Invalid option, please try again.")
             continue
         break
 
     # Handle user input
-    if user_input == 1:
+    if user_selection == 1:
         print("Stopping WireGuard service...")
         stop_wg_service(wg_config.wg_nic_name)
         sleep(3)
@@ -603,7 +608,7 @@ def main_menu() -> None:
         print("WireGuard service stopped successfully.")
         return
 
-    if user_input == 2:
+    if user_selection == 2:
         print("Starting WireGuard service...")
         start_wg_service(wg_config.wg_nic_name)
         sleep(3)
@@ -615,7 +620,7 @@ def main_menu() -> None:
         print("WireGuard service started successfully.")
         return
 
-    if user_input == 3:
+    if user_selection == 3:
         print("Restarting WireGuard service...")
         restart_wg_service(wg_config.wg_nic_name)
         sleep(3)
@@ -627,7 +632,7 @@ def main_menu() -> None:
         print("WireGuard service restarted successfully.")
         return
 
-    if user_input == 4:
+    if user_selection == 4:
         print("Uninstalling WireGuard service...")
         while True:
             confirm = (
@@ -663,7 +668,7 @@ def main_menu() -> None:
         print("WireGuard service uninstalled successfully.")
         return
 
-    if user_input == 5:
+    if user_selection == 5:
         print("Listing all peers...")
         for peer in peer_configs:
             print(f"Peer Name: {peer.peer_name}")
@@ -673,17 +678,17 @@ def main_menu() -> None:
             print("")
         return
 
-    if user_input == 6:
+    if user_selection == 6:
         print("Adding a new peer...")
         print("Feature not yet implemented.")
         return
 
-    if user_input == 7:
+    if user_selection == 7:
         print("Removing a peer...")
         print("Feature not yet implemented.")
         return
 
-    if user_input == 8:
+    if user_selection == 8:
         print("Exiting main menu.")
         return
 
