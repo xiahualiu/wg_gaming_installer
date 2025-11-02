@@ -584,7 +584,7 @@ def main_menu() -> None:
 
     user_input: int
     while True:
-        user_input = prompt("Please select an option from the menu. [1-8]")
+        user_input = prompt("Please select an option from the menu [1-8] => ")
         try:
             user_selection = int(user_input)
         except ValueError:
