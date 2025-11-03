@@ -25,6 +25,7 @@ from wg_gaming_installer.shell_scripts import (
     install_wireguard_go,
     is_os_supported,
     need_userspace_wireguard,
+    qrencode_text_to_terminal,
     start_wg_service,
     stop_wg_service,
     uninstall_wg_dependencies,
@@ -171,6 +172,34 @@ def create_wg_conf(
 
     # Set file permissions to 600
     wg_conf_path.chmod(0o600)
+
+
+def create_peer_wg_str(peer: PeerConfig, wg_config: ServerWGConfig) -> str:
+    """
+    Generate a WireGuard configuration str for a peer.
+    """
+
+    peer_wg_conf_str = "[Interface]\n"
+    if peer.ipv6:
+        peer_wg_conf_str += f"Address = {peer.ipv4}/32, {peer.ipv6}/128\n"
+    else:
+        peer_wg_conf_str += f"Address = {peer.ipv4}/32\n"
+    peer_wg_conf_str += f"PrivateKey = {peer.private_key}\n"
+    peer_wg_conf_str += "\n"
+    peer_wg_conf_str += "[Peer]\n"
+    peer_wg_conf_str += f"PublicKey = {wg_config.public_key}\n"
+    peer_wg_conf_str += f"PresharedKey = {peer.preshared_key}\n"
+    if wg_config.ipv6:
+        peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0, ::/0\n"
+    else:
+        peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0\n"
+    peer_wg_conf_str += f"Endpoint = {wg_config.ipv4}"
+    peer_wg_conf_str += ":"
+    peer_wg_conf_str += f"{wg_config.listen_port}\n"
+    peer_wg_conf_str += "PersistentKeepalive = 25\n"
+    peer_wg_conf_str += "\n"
+
+    return peer_wg_conf_str
 
 
 def continue_install(state: InstallStatus) -> list[Callable[[], None]]:
@@ -320,6 +349,16 @@ def server_add_wg_peer_step() -> None:
     # Update database with new peer
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
         add_peer_config(conn, new_peer_config)
+
+    # Generate WireGuard peer configuration string
+    peer_wg_conf_str: str = create_peer_wg_str(new_peer_config, wg_config)
+
+    # Print the new peer WireGuard configuration
+    print("\nNew peer WireGuard configuration:\n")
+    print(peer_wg_conf_str)
+
+    # QR code generation
+    qrencode_text_to_terminal(peer_wg_conf_str)
 
     print(f"Peer '{new_peer_config.name}' added successfully.")
 

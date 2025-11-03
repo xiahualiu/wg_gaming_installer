@@ -284,6 +284,26 @@ def is_os_supported(os_id: str, os_version: str) -> bool:
     return True
 
 
+def qrencode_text_to_terminal(text: str) -> None:
+    """
+    Generate and display a QR code in the terminal using qrencode.
+    Args:
+        text (str): The text to encode in the QR code.
+    Raises:
+        RuntimeError: If qrencode command is not found.
+    """
+    if shutil.which('qrencode') is None:
+        raise RuntimeError("qrencode command not found in PATH.")
+
+    # Send text to qrencode on stdin; let qrencode write ANSI QR to stdout
+    subprocess.run(
+        ["qrencode", "-t", "ansiutf8", "-l", "L"],
+        input=text,
+        text=True,
+        check=True,
+    )
+
+
 def install_wg_dependencies(os_id: str, os_version: str) -> None:
     """
     Install kernel WireGuard using the system's package manager.
