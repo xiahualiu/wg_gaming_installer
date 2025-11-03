@@ -334,6 +334,13 @@ def server_add_wg_peer_step() -> None:
     """
     print("Adding a new WireGuard peer...")
 
+    # If WireGuard is active, stop it first
+    need_restart: bool = False
+    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        print("Stopping WireGuard service before adding peer...")
+        server_stop_wg_service_step()
+        need_restart = True
+
     # Read existing WG config and peers from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
         wg_config: ServerWGConfig | None = read_wg_config(conn)
@@ -359,6 +366,10 @@ def server_add_wg_peer_step() -> None:
 
     # QR code generation
     qrencode_text_to_terminal(peer_wg_conf_str)
+
+    if need_restart:
+        print("Restarting WireGuard service...")
+        server_start_wg_service_step()
 
     print(f"Peer '{new_peer_config.name}' added successfully.")
 
