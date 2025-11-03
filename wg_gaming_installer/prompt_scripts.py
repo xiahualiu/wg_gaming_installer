@@ -387,15 +387,16 @@ def peer_ipv6_prompt(
         if i == 65535:
             print("No available IPv6 addresses for new peer.", file=sys.stderr)
             return None
-        hex_seg: str = format(i, "04x")
+        hex_seg: str = format(i, "02x")
         default_ipv6: str = f"{ipv6_prefix}{hex_seg}"
         if default_ipv6 not in used_ips:
             break
 
     peer_ipv6_octet: str = prompt(
-        f"Input the WireGuard IPv6 address of the new peer: {ipv6_prefix}",
+        f"Input the WireGuard IPv6 address of the new peer [01-FF]: {ipv6_prefix}",
         default=hex_seg,
     ).strip()
+    peer_ipv6_octet = peer_ipv6_octet.zfill(2)
     peer_ipv6 = f"{ipv6_prefix}{peer_ipv6_octet}"
     if not validate_ipv6_address(peer_ipv6):
         print("Invalid IPv6 address.", file=sys.stderr)
