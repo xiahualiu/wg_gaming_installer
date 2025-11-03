@@ -728,7 +728,7 @@ def rm_peer_prompt(existing_peers: list[PeerConfig]) -> PeerConfig | None:
         return None
 
 
-def select_peer_config(peers: list[PeerConfig]) -> PeerConfig:
+def select_peer_config(peers: list[PeerConfig]) -> PeerConfig | None:
     """
     Prompt the user to select an existing peer.
 
@@ -738,7 +738,11 @@ def select_peer_config(peers: list[PeerConfig]) -> PeerConfig:
     Returns:
         PeerConfig | None: The selected peer configuration or None if cancelled.
     """
-    print("Select a peer to show QR code & config:")
+    if not peers:
+        print("No existing peers to select.", file=sys.stderr)
+        return None
+
+    print("Select a peer to continue:")
     for idx, peer in enumerate(peers):
         print(f"Peer #{idx}: {peer.name}")
         print(f"├─ IPv4: {peer.ipv4}")
@@ -758,3 +762,28 @@ def select_peer_config(peers: list[PeerConfig]) -> PeerConfig:
             continue
         break
     return peers[selected_idx]
+
+
+def uninstall_wg_prompt() -> bool:
+    """
+    Prompt the user to confirm uninstallation of WireGuard Gaming Installer.
+
+    Returns:
+        bool: True if uninstallation is confirmed, False otherwise.
+    """
+    while True:
+        confirm = (
+            prompt(
+                "Are you sure you want to uninstall WireGuard service?"
+                "This action cannot be undone. (yes/no) => "
+            )
+            .strip()
+            .lower()
+        )
+        if confirm in ['yes', 'no']:
+            break
+        print("Invalid input, please enter 'yes' or 'no'.")
+    if confirm == 'no':
+        return False
+    else:
+        return True

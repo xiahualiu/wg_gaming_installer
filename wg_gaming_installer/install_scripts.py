@@ -12,10 +12,10 @@ from prompt_toolkit import prompt
 
 from wg_gaming_installer.prompt_scripts import (
     add_peer_prompt,
-    rm_peer_prompt,
     select_peer_config,
     server_if_prompt,
     server_wg_prompt,
+    uninstall_wg_prompt,
 )
 from wg_gaming_installer.shell_scripts import (
     ServiceStatus,
@@ -157,8 +157,8 @@ def create_wg_conf(
             f.write(f"Address = {wg_config.ipv4}/24\n")
         f.write(f"ListenPort = {wg_config.listen_port}\n")
         f.write(f"PrivateKey = {wg_config.private_key}\n\n")
-        f.write(f"PostUp = {script_python_bin()} {wg_start_script_path()}\n")
-        f.write(f"PostDown = {script_python_bin()} {wg_stop_script_path()}\n")
+        f.write(f"PostUp = {str(script_python_bin())} {str(wg_start_script_path())}\n")
+        f.write(f"PostDown = {str(script_python_bin())} {str(wg_stop_script_path())}\n")
         f.write("SaveConfig = false\n")
         f.write("\n")
         for peer in peer_config:
@@ -191,7 +191,7 @@ def create_peer_wg_str(peer: PeerConfig, wg_config: ServerWGConfig) -> str:
     peer_wg_conf_str += f"PublicKey = {wg_config.public_key}\n"
     peer_wg_conf_str += f"PresharedKey = {peer.preshared_key}\n"
     if wg_config.ipv6:
-        peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0, ::/0\n"
+        peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0,::/0\n"
     else:
         peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0\n"
     peer_wg_conf_str += f"Endpoint = {wg_config.ipv4}"
@@ -375,7 +375,7 @@ def server_add_wg_peer_step() -> None:
     print(f"Peer '{new_peer_config.name}' added successfully.")
 
 
-def server_rm_wg_peer_step() -> None:
+def server_rm_wg_peer_step(selected_peer: PeerConfig) -> None:
     """
     Remove a WireGuard peer.
     """
@@ -387,19 +387,9 @@ def server_rm_wg_peer_step() -> None:
         need_restart = True
         server_stop_wg_service_step()
 
-    # Read existing peers from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        existing_peers: list[PeerConfig] = read_all_peer_configs(conn)
-
-    # Prompt user to select peer to remove
-    peer_to_remove: PeerConfig | None = rm_peer_prompt(existing_peers=existing_peers)
-    if not peer_to_remove:
-        print("No peer selected for removal.")
-        return
-
-    with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        delete_peer_config(conn, peer_to_remove.name)
-    print(f"Peer '{peer_to_remove.name}' removed successfully.")
+        delete_peer_config(conn, selected_peer.name)
+    print(f"Peer '{selected_peer.name}' removed successfully.")
 
     if need_restart:
         print("Restarting WireGuard service...")
@@ -527,7 +517,7 @@ def main_menu() -> None:
     print("7. Remove a peer.")
     print("8. Exit.")
 
-    user_input: int
+    user_input: str
     while True:
         user_input = prompt("Please select an option from the menu [1-8] => ")
         try:
@@ -554,27 +544,16 @@ def main_menu() -> None:
         return
 
     if user_selection == 3:
-        print("Uninstalling WireGuard service...")
-        while True:
-            confirm = (
-                prompt(
-                    "Are you sure you want to uninstall WireGuard service?"
-                    "This action cannot be undone. (yes/no) => "
-                )
-                .strip()
-                .lower()
-            )
-            if confirm in ['yes', 'no']:
-                break
-            print("Invalid input, please enter 'yes' or 'no'.")
-        if confirm == 'no':
+        confirm: bool = uninstall_wg_prompt()
+        if confirm:
+            stop_wg_service(wg_config.wg_name)
+            uninstall_wg_package_step()
+            uninstall_delete_folders()
+            print("WireGuard service uninstalled successfully.")
+            return
+        else:
             print("Uninstallation cancelled.")
             return
-        stop_wg_service(wg_config.wg_name)
-        uninstall_wg_package_step()
-        uninstall_delete_folders()
-        print("WireGuard service uninstalled successfully.")
-        return
 
     if user_selection == 4:
         print("Listing all peers...")
@@ -587,7 +566,9 @@ def main_menu() -> None:
         return
 
     if user_selection == 5:
-        selected_peer: PeerConfig = select_peer_config(peer_configs)
+        selected_peer = select_peer_config(peer_configs)
+        if not selected_peer:
+            return
         peer_wg_conf_str: str = create_peer_wg_str(selected_peer, wg_config)
         print("\nPeer WireGuard configuration:\n")
         print(peer_wg_conf_str)
@@ -599,7 +580,10 @@ def main_menu() -> None:
         return
 
     if user_selection == 7:
-        server_rm_wg_peer_step()
+        selected_peer = select_peer_config(peer_configs)
+        if not selected_peer:
+            return
+        server_rm_wg_peer_step(selected_peer=selected_peer)
         return
 
     if user_selection == 8:
