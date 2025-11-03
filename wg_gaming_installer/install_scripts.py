@@ -13,6 +13,7 @@ from prompt_toolkit import prompt
 from wg_gaming_installer.prompt_scripts import (
     add_peer_prompt,
     rm_peer_prompt,
+    select_peer_config,
     server_if_prompt,
     server_wg_prompt,
 )
@@ -521,19 +522,20 @@ def main_menu() -> None:
     print("2. Start WireGuard service (and enable on OS start up).")
     print("3. Uninstall WireGuard service.")
     print("4. List all peers.")
-    print("5. Add a new peer.")
-    print("6. Remove a peer.")
-    print("7. Exit.")
+    print("5. Show QR code & config for a peer.")
+    print("6. Add a new peer.")
+    print("7. Remove a peer.")
+    print("8. Exit.")
 
     user_input: int
     while True:
-        user_input = prompt("Please select an option from the menu [1-7] => ")
+        user_input = prompt("Please select an option from the menu [1-8] => ")
         try:
             user_selection = int(user_input)
         except ValueError:
-            print("Invalid input, please enter a number between 1 and 7.")
+            print("Invalid input, please enter a number between 1 and 8.")
             continue
-        if user_selection not in [1, 2, 3, 4, 5, 6, 7]:
+        if user_selection not in [1, 2, 3, 4, 5, 6, 7, 8]:
             print("Invalid option, please try again.")
             continue
         break
@@ -585,14 +587,22 @@ def main_menu() -> None:
         return
 
     if user_selection == 5:
-        server_add_wg_peer_step()
+        selected_peer: PeerConfig = select_peer_config(peer_configs)
+        peer_wg_conf_str: str = create_peer_wg_str(selected_peer, wg_config)
+        print("\nPeer WireGuard configuration:\n")
+        print(peer_wg_conf_str)
+        qrencode_text_to_terminal(peer_wg_conf_str)
         return
 
     if user_selection == 6:
-        server_rm_wg_peer_step()
+        server_add_wg_peer_step()
         return
 
     if user_selection == 7:
+        server_rm_wg_peer_step()
+        return
+
+    if user_selection == 8:
         print("Exiting main menu.")
         return
 

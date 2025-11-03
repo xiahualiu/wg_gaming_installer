@@ -726,3 +726,35 @@ def rm_peer_prompt(existing_peers: list[PeerConfig]) -> PeerConfig | None:
     else:
         print("Peer removal cancelled.")
         return None
+
+
+def select_peer_config(peers: list[PeerConfig]) -> PeerConfig:
+    """
+    Prompt the user to select an existing peer.
+
+    Args:
+        existing_peers (list[PeerConfig]): List of existing peers.
+
+    Returns:
+        PeerConfig | None: The selected peer configuration or None if cancelled.
+    """
+    print("Select a peer to show QR code & config:")
+    for idx, peer in enumerate(peers):
+        print(f"Peer #{idx}: {peer.name}")
+        print(f"├─ IPv4: {peer.ipv4}")
+        print(f"├─ IPv6: {peer.ipv6}")
+        print(f"└─ Forwarded Ports: {peer.forward_ports_str()}")
+        print("")
+    selected_idx: int
+    while True:
+        user_input = prompt(f"Please select a peer [0-{len(peers)-1}] => ")
+        try:
+            selected_idx = int(user_input)
+        except ValueError:
+            print("Invalid input, please enter a valid number.")
+            continue
+        if selected_idx < 0 or selected_idx >= len(peers):
+            print("Invalid option, please try again.")
+            continue
+        break
+    return peers[selected_idx]
