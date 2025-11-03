@@ -396,8 +396,12 @@ def peer_ipv6_prompt(
         f"Input the WireGuard IPv6 address of the new peer [01-FF]: {ipv6_prefix}",
         default=hex_seg,
     ).strip()
-    peer_ipv6_octet = peer_ipv6_octet.zfill(2)
-    peer_ipv6 = f"{ipv6_prefix}{peer_ipv6_octet}"
+    try:
+        int(peer_ipv6_octet, 16)
+    except ValueError:
+        print("Invalid IPv6 segment.", file=sys.stderr)
+        return None
+    peer_ipv6 = f"{ipv6_prefix}{peer_ipv6_octet.zfill(2)}"
     if not validate_ipv6_address(peer_ipv6):
         print("Invalid IPv6 address.", file=sys.stderr)
         return None
