@@ -45,6 +45,10 @@ def main() -> None:
     )
     nft.cmd(f'add rule ip nat postrouting oifname "{server_cfg.nic_name}" masquerade')
 
+    # IPv4 DNAT
+    nft.cmd(
+        'add chain ip nat prerouting { type nat hook prerouting priority dstnat ; }'
+    )
     for peer in peer_cfgs:
         if peer.ipv4:
             ports_str = peer.forward_ports_str()
@@ -66,6 +70,11 @@ def main() -> None:
         nft.cmd(
             f'add rule ip6 nat postrouting oifname '
             f'"{server_cfg.nic_name}" masquerade'
+        )
+        # IPv6 DNAT
+        nft.cmd(
+            "add chain ip6 nat prerouting "
+            "{ type nat hook prerouting priority dstnat ; }"
         )
         for peer in peer_cfgs:
             if peer.ipv6:
