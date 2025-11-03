@@ -335,14 +335,15 @@ def peer_ipv4_prompt(
             print("No available IPv4 addresses for new peer.", file=sys.stderr)
             return None
 
-        default_ipv4: str = f"{subnet_prefix}{i}"
-        if default_ipv4 not in used_ips:
+        default_ipv4_octet: str = str(i)
+        if subnet_prefix + default_ipv4_octet not in used_ips:
             break
 
-    peer_ipv4: str = prompt(
-        "Input the WireGuard IPv4 address of the new peer: ",
-        default=default_ipv4,
+    peer_ipv4_octet: str = prompt(
+        f"Input the WireGuard IPv4 address of the new peer: {subnet_prefix}",
+        default=default_ipv4_octet,
     ).strip()
+    peer_ipv4: str = subnet_prefix + peer_ipv4_octet
     if not validate_ipv4_address(peer_ipv4):
         print("Invalid IPv4 address.", file=sys.stderr)
         return None
@@ -391,10 +392,11 @@ def peer_ipv6_prompt(
         if default_ipv6 not in used_ips:
             break
 
-    peer_ipv6: str = prompt(
-        "Input the WireGuard IPv6 address of the new peer: ",
-        default=default_ipv6,
+    peer_ipv6_octet: str = prompt(
+        f"Input the WireGuard IPv6 address of the new peer: {ipv6_prefix}",
+        default=hex_seg,
     ).strip()
+    peer_ipv6 = f"{ipv6_prefix}{peer_ipv6_octet}"
     if not validate_ipv6_address(peer_ipv6):
         print("Invalid IPv6 address.", file=sys.stderr)
         return None
