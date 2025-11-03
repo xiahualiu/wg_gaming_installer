@@ -279,7 +279,7 @@ def server_if_setup_step() -> None:
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
         update_server_config(
             db_conn=conn,
-            server_if_config=server_if_config,
+            server_config=server_if_config,
         )
         update_install_status(
             db_conn=conn, new_state=InstallStatus.SERVER_IF_CONFIGURED
