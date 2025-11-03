@@ -7,10 +7,10 @@ from __future__ import annotations
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from enum import Enum, IntEnum, auto
+from enum import IntEnum, auto
 from pathlib import Path
 from textwrap import dedent
-from typing import Generator
+from typing import Generator, Union
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,46 +21,83 @@ class OSInfo:
 
 
 @dataclass(frozen=True, slots=True)
-class ServerConfig:
-    server_nic_name: str
-    server_ipv4: str
-    server_ipv6: str
+class ServerIFConfig:
+    nic_name: str
+    nic_ipv4: str
+    nic_ipv6: str | None
 
 
 @dataclass(frozen=True, slots=True)
-class WGConfig:
-    wg_nic_name: str
-    wg_ipv4: str
-    wg_ipv6: str | None
-    wg_listen_port: int
-    wg_private_key: str
-    wg_public_key: str
+class ServerWGConfig:
+    wg_name: str
+    ipv4: str
+    ipv6: str | None
+    listen_port: int
+    private_key: str
+    public_key: str
 
 
-class WGForwardPortEnum(Enum):
-    SINGLE: int
-    RANGE: tuple[int, int]
+@dataclass(frozen=True, slots=True)
+class SinglePort:
+    port: int
+
+
+@dataclass(frozen=True, slots=True)
+class PortRange:
+    start: int
+    end: int
+
+
+ForwardPort = Union[SinglePort, PortRange]
 
 
 @dataclass(frozen=True, slots=True)
 class PeerConfig:
-    peer_name: str
-    peer_ipv4: str
-    peer_ipv6: str
+    name: str
+    ipv4: str
+    ipv6: str | None
     public_key: str
+    private_key: str
     preshared_key: str
-    forward_ports: list[WGForwardPortEnum]
+    forward_ports: list[ForwardPort]
 
     def forward_ports_str(self) -> str:
+        """
+        Serialize forward_ports to the DB string format:
+            - single ports: "80"
+            - ranges: "1000-2000"
+        multiple entries joined by commas
+        """
         ports_str_list: list[str] = []
-        for port in self.forward_ports:
-            if isinstance(port, WGForwardPortEnum) and port == WGForwardPortEnum.SINGLE:
-                ports_str_list.append(str(port.value))
-            elif (
-                isinstance(port, WGForwardPortEnum) and port == WGForwardPortEnum.RANGE
-            ):
-                ports_str_list.append(f"{port.value[0]}-{port.value[1]}")
+        for item in self.forward_ports:
+            if isinstance(item, SinglePort):
+                ports_str_list.append(str(item.port))
+            elif isinstance(item, PortRange):
+                ports_str_list.append(f"{item.start}-{item.end}")
         return ",".join(ports_str_list)
+
+
+def parse_forward_ports(ports_str: str) -> list[ForwardPort]:
+    """
+    Parse the forward_ports string from the DB into a list of ForwardPort objects.
+    Args:
+        ports_str (str): The forward_ports string from the DB.
+    Returns:
+        list[ForwardPort]: The parsed list of ForwardPort objects.
+    """
+    forward_ports: list[ForwardPort] = []
+    if not ports_str:
+        return forward_ports
+
+    entries = ports_str.split(",")
+    for entry in entries:
+        entry = entry.strip()
+        if "-" in entry:
+            start_str, end_str = entry.split("-", 1)
+            forward_ports.append(PortRange(start=int(start_str), end=int(end_str)))
+        else:
+            forward_ports.append(SinglePort(port=int(entry)))
+    return forward_ports
 
 
 class InstallStatus(IntEnum):
@@ -69,6 +106,7 @@ class InstallStatus(IntEnum):
     SW_INSTALLED = auto()
     SERVER_IF_CONFIGURED = auto()
     SERVER_WG_CONFIGURED = auto()
+    UNKNOWN = auto()
 
 
 def create_config_db(db_conn: sqlite3.Connection) -> None:
@@ -78,44 +116,46 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
 
     Table : os_info
         id INTEGER PRIMARY KEY CHECK (id = 1),
-        os_name TEXT,
-        os_version TEXT
-
-    Table : server_config
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        server_nic_name TEXT,
-        server_ipv4     TEXT,
-        server_ipv6     TEXT,
+        os_name         TEXT,
+        os_version      TEXT,
         userspace_wg    BOOLEAN
 
-    Table : wg_server_config
+    Table : server_nic_config
         id INTEGER PRIMARY KEY CHECK (id = 1),
-        wg_nic_name     TEXT,
-        wg_ipv4         TEXT,
-        wg_ipv6         TEXT,
-        wg_listen_port  INTEGER CHECK (wg_listen_port BETWEEN 1 AND 65535),
-        wg_private_key TEXT,
-        wg_public_key  TEXT
+        nic_name        TEXT,
+        nic_ipv4        TEXT,
+        nic_ipv6        TEXT
 
-    Table : wg_peer_config
+    Table : server_wg_config
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        wg_name     TEXT,
+        ipv4        TEXT,
+        ipv6        TEXT,
+        listen_port INTEGER CHECK (listen_port BETWEEN 1 AND 65535),
+        private_key TEXT,
+        public_key  TEXT
+
+    Table : peer_config
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        peer_name     TEXT,
-        peer_ipv4     TEXT,
-        peer_ipv6     TEXT,
+        name            TEXT,
+        ipv4            TEXT,
+        ipv6            TEXT,
         public_key      TEXT,
+        private_key     TEXT,
         preshared_key   TEXT,
         forward_ports   TEXT
 
     Table : install_status
-        step_name       TEXT PRIMARY KEY,
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        state TEXT NOT NULL DEFAULT 'not_started'
     """
 
     # Drop existing table if exists and create new one
     cur = db_conn.cursor()
     cur.execute("DROP TABLE IF EXISTS os_info;")
-    cur.execute("DROP TABLE IF EXISTS server_config;")
-    cur.execute("DROP TABLE IF EXISTS wg_config;")
-    cur.execute("DROP TABLE IF EXISTS wg_peer_config;")
+    cur.execute("DROP TABLE IF EXISTS server_nic_config;")
+    cur.execute("DROP TABLE IF EXISTS server_wg_config;")
+    cur.execute("DROP TABLE IF EXISTS peer_config;")
     cur.execute("DROP TABLE IF EXISTS install_status;")
 
     cur.execute(
@@ -134,11 +174,11 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
     cur.execute(
         dedent(
             """
-            CREATE TABLE server_config (
+            CREATE TABLE server_nic_config (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                server_nic_name TEXT,
-                server_ipv4     TEXT,
-                server_ipv6     TEXT
+                nic_name TEXT,
+                nic_ipv4 TEXT,
+                nic_ipv6 TEXT
             );
             """
         )
@@ -146,15 +186,14 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
     cur.execute(
         dedent(
             """
-            CREATE TABLE wg_config (
+            CREATE TABLE server_wg_config (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                wg_nic_name     TEXT,
-                wg_ipv4         TEXT,
-                wg_ipv6         TEXT,
-                wg_listen_port  INTEGER
-                CHECK (wg_listen_port BETWEEN 1 AND 65535),
-                wg_private_key  TEXT,
-                wg_public_key   TEXT
+                wg_name      TEXT,
+                ipv4         TEXT,
+                ipv6         TEXT,
+                listen_port  INTEGER CHECK (listen_port BETWEEN 1 AND 65535),
+                private_key  TEXT,
+                public_key   TEXT
             );
             """
         )
@@ -162,12 +201,13 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
     cur.execute(
         dedent(
             """
-            CREATE TABLE wg_peer_config (
+            CREATE TABLE peer_config (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                peer_name     TEXT,
-                peer_ipv4     TEXT,
-                peer_ipv6     TEXT,
+                name     TEXT,
+                ipv4     TEXT,
+                ipv6     TEXT,
                 public_key      TEXT,
+                private_key     TEXT,
                 preshared_key   TEXT,
                 forward_ports   TEXT
             );
@@ -185,8 +225,7 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                     'db_created',
                     'sw_installed',
                     'server_if_configured',
-                    'server_wg_configured',
-                    'peers_configured'
+                    'server_wg_configured'
                 ))
             );
             """
@@ -221,8 +260,11 @@ def conf_db_connected(db_path: Path) -> Generator[sqlite3.Connection, None, None
     conn.row_factory = sqlite3.Row
     try:
         yield conn
-    finally:
         conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
         conn.close()
 
 
@@ -232,7 +274,7 @@ def read_install_status(db_conn: sqlite3.Connection) -> InstallStatus:
     Args:
         db_conn (sqlite3.Connection): The database connection object.
     Returns:
-        str: The current installation status.
+        InstallStatus: The current installation status.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
@@ -243,10 +285,10 @@ def read_install_status(db_conn: sqlite3.Connection) -> InstallStatus:
         )
     )
     row: sqlite3.Row = cur.fetchone()
-    if row:
-        return InstallStatus[row['state'].upper()]
+    if row and row["state"].upper() in InstallStatus.__members__:
+        return InstallStatus[row["state"].upper()]
     else:
-        return InstallStatus.NOT_STARTED
+        return InstallStatus.UNKNOWN
 
 
 def update_install_status(
@@ -256,7 +298,7 @@ def update_install_status(
     Update the installation status in the database.
     Args:
         db_conn (sqlite3.Connection): The database connection object.
-        new_state (str): The new installation status to set.
+        new_state (InstallStatus): The new installation status to set.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
@@ -314,105 +356,108 @@ def update_os_info(db_conn: sqlite3.Connection, os_info: OSInfo) -> None:
     )
 
 
-def read_server_config(db_conn: sqlite3.Connection) -> ServerConfig | None:
+def read_server_nic_config(db_conn: sqlite3.Connection) -> ServerIFConfig | None:
     """
-    Read the server configuration from the database.
+    Read the server NIC configuration from the database.
     Args:
         db_conn (sqlite3.Connection): The database connection object.
     Returns:
-        ServerConfig | None: The server configuration if set, otherwise None.
+        ServerNICConfig | None: The server NIC configuration if set, otherwise None.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
-    cur.execute("SELECT * FROM server_config WHERE id = 1;")
+    cur.execute("SELECT * FROM server_nic_config WHERE id = 1;")
     row: sqlite3.Row | None = cur.fetchone()
     if row:
-        return ServerConfig(
-            server_nic_name=row["server_nic_name"],
-            server_ipv4=row["server_ipv4"],
-            server_ipv6=row["server_ipv6"],
+        return ServerIFConfig(
+            nic_name=row["nic_name"],
+            nic_ipv4=row["nic_ipv4"],
+            nic_ipv6=row["nic_ipv6"],
         )
     return None
 
 
 def update_server_config(
-    db_conn: sqlite3.Connection, server_config: ServerConfig
+    db_conn: sqlite3.Connection, server_config: ServerIFConfig
 ) -> None:
     """
-    Update the server configuration in the database.
+    Update the server NIC configuration in the database.
     Args:
         db_conn (sqlite3.Connection): The database connection object.
-        server_config (ServerConfig): The server configuration data.
+        server_config (ServerNICConfig): The server NIC configuration data.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
         dedent(
             """
-            REPLACE INTO server_config
-            (id, server_nic_name, server_ipv4, server_ipv6)
+            REPLACE INTO server_nic_config
+            (id, nic_name, nic_ipv4, nic_ipv6)
             VALUES (1, ?, ?, ?);
             """
         ),
         (
-            server_config.server_nic_name,
-            server_config.server_ipv4,
-            server_config.server_ipv6,
+            server_config.nic_name,
+            server_config.nic_ipv4,
+            server_config.nic_ipv6,
         ),
     )
 
 
-def read_wg_config(db_conn: sqlite3.Connection) -> WGConfig | None:
+def read_wg_config(db_conn: sqlite3.Connection) -> ServerWGConfig | None:
     """
-    Read the server configuration from the database.
+    Read the WireGuard server configuration from the database.
+
     Args:
         db_conn (sqlite3.Connection): The database connection object.
+
     Returns:
-        dict[str, str] | None: The server configuration if set, otherwise None.
+        ServerWGConfig | None: The WireGuard server configuration if set,
+        otherwise None.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
-    cur.execute("SELECT * FROM wg_config WHERE id = 1;")
+    cur.execute("SELECT * FROM server_wg_config WHERE id = 1;")
     row: sqlite3.Row | None = cur.fetchone()
     if row:
-        return WGConfig(
-            wg_nic_name=row["wg_nic_name"],
-            wg_ipv4=row["wg_ipv4"],
-            wg_ipv6=row["wg_ipv6"],
-            wg_listen_port=row["wg_listen_port"],
-            wg_private_key=row["wg_private_key"],
-            wg_public_key=row["wg_public_key"],
+        return ServerWGConfig(
+            wg_name=row["wg_name"],
+            ipv4=row["ipv4"],
+            ipv6=row["ipv6"] or None,
+            listen_port=row["listen_port"],
+            private_key=row["private_key"],
+            public_key=row["public_key"],
         )
     return None
 
 
-def update_wg_config(db_conn: sqlite3.Connection, wg_config: WGConfig) -> None:
+def update_wg_config(db_conn: sqlite3.Connection, wg_config: ServerWGConfig) -> None:
     """
     Update the WireGuard server configuration in the database.
     Args:
         db_conn (sqlite3.Connection): The database connection object.
-        wg_config (WGConfig): The WireGuard configuration data.
+        wg_config (ServerWGConfig): The WireGuard configuration data.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
         dedent(
             """
-            REPLACE INTO wg_config (
+            REPLACE INTO server_wg_config (
                 id,
-                wg_nic_name,
-                wg_ipv4,
-                wg_ipv6,
-                wg_listen_port,
-                wg_private_key,
-                wg_public_key
+                wg_name,
+                ipv4,
+                ipv6,
+                listen_port,
+                private_key,
+                public_key
             )
             VALUES (1, ?, ?, ?, ?, ?, ?);
             """
         ),
         (
-            wg_config.wg_nic_name,
-            wg_config.wg_ipv4,
-            wg_config.wg_ipv6 or "",
-            wg_config.wg_listen_port,
-            wg_config.wg_private_key,
-            wg_config.wg_public_key,
+            wg_config.wg_name,
+            wg_config.ipv4,
+            wg_config.ipv6 or "",
+            wg_config.listen_port,
+            wg_config.private_key,
+            wg_config.public_key,
         ),
     )
 
@@ -426,21 +471,54 @@ def read_all_peer_configs(db_conn: sqlite3.Connection) -> list[PeerConfig]:
         list[PeerConfig]: A list of all peer configurations.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
-    cur.execute("SELECT * FROM wg_peer_config;")
+    cur.execute("SELECT * FROM peer_config;")
     rows: list[sqlite3.Row] = cur.fetchall()
     peer_configs: list[PeerConfig] = []
     for row in rows:
         peer_configs.append(
             PeerConfig(
-                peer_name=row["peer_name"],
-                peer_ipv4=row["peer_ipv4"],
-                peer_ipv6=row["peer_ipv6"],
+                name=row["name"],
+                ipv4=row["ipv4"],
+                ipv6=row["ipv6"] if row["ipv6"] else None,
                 public_key=row["public_key"],
+                private_key=row["private_key"],
                 preshared_key=row["preshared_key"],
-                forward_ports=row["forward_ports"],
+                forward_ports=parse_forward_ports(row["forward_ports"]),
             )
         )
     return peer_configs
+
+
+def read_peer_config(db_conn: sqlite3.Connection, peer_name: str) -> PeerConfig | None:
+    """
+    Read a specific peer configuration from the database by peer name.
+    Args:
+        db_conn (sqlite3.Connection): The database connection object.
+        peer_name (str): The name of the peer to read.
+    Returns:
+        PeerConfig | None: The peer configuration if found, otherwise None.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute(
+        dedent(
+            """
+            SELECT * FROM peer_config WHERE name = ?;
+            """
+        ),
+        (peer_name,),
+    )
+    row: sqlite3.Row | None = cur.fetchone()
+    if row:
+        return PeerConfig(
+            name=row["name"],
+            ipv4=row["ipv4"],
+            ipv6=row["ipv6"] if row["ipv6"] else None,
+            public_key=row["public_key"],
+            private_key=row["private_key"],
+            preshared_key=row["preshared_key"],
+            forward_ports=parse_forward_ports(row["forward_ports"]),
+        )
+    return None
 
 
 def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> None:
@@ -451,34 +529,34 @@ def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> Non
         peer_config (PeerConfig): The peer configuration data.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
-    # Make sure peer with same peer_name does not already exist
-    existing_peer = read_all_peer_configs(db_conn)
-    if any(p.peer_name == peer_config.peer_name for p in existing_peer):
-        raise ValueError(
-            f"Peer with client_name '{peer_config.peer_name}' already exists."
-        )
+    # Make sure peer with same name does not already exist
+    existing_peer: PeerConfig | None = read_peer_config(db_conn, peer_config.name)
+    if existing_peer is not None:
+        raise ValueError(f"Peer with name '{peer_config.name}' already exists.")
 
     cur.execute(
         dedent(
             """
-            INSERT INTO wg_peer_config (
-                peer_name,
-                peer_ipv4,
-                peer_ipv6,
+            INSERT INTO peer_config (
+                name,
+                ipv4,
+                ipv6,
                 public_key,
+                private_key,
                 preshared_key,
                 forward_ports
             )
-            VALUES (?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?);
             """
         ),
         (
-            peer_config.peer_name,
-            peer_config.peer_ipv4,
-            peer_config.peer_ipv6,
+            peer_config.name,
+            peer_config.ipv4,
+            peer_config.ipv6 or "",
             peer_config.public_key,
+            peer_config.private_key,
             peer_config.preshared_key,
-            peer_config.forward_ports,
+            peer_config.forward_ports_str(),
         ),
     )
 
@@ -494,7 +572,7 @@ def delete_peer_config(db_conn: sqlite3.Connection, peer_name: str) -> None:
     cur.execute(
         dedent(
             """
-            DELETE FROM wg_peer_config WHERE peer_name = ?;
+            DELETE FROM peer_config WHERE name = ?;
             """
         ),
         (peer_name,),

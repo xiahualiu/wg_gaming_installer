@@ -210,7 +210,7 @@ def validate_port_not_in_use(port: int, sock_type: socket.AddressFamily) -> bool
             return False
 
 
-def wg_gen_keypair() -> tuple[str, str]:
+def gen_wg_keypair() -> tuple[str, str]:
     # Create a WireGuard private/public key pair
     if shutil.which('wg') is None:
         raise RuntimeError("WireGuard 'wg' command not found in PATH.")
@@ -227,14 +227,50 @@ def wg_gen_keypair() -> tuple[str, str]:
 
 def get_os_info() -> tuple[str, str]:
     """
-    Retrieve the operating system name and version.
+    Get the operating system ID and version.
     Returns:
-        tuple[str, str]: A tuple containing the OS name and version.
+        tuple[str, str]: A tuple containing the OS ID and version.
     """
-
     os_id: str = distro.id()
     os_version: str = distro.version(pretty=False, best=False)
     return os_id, os_version
+
+
+def is_os_supported(os_id: str, os_version: str) -> bool:
+    """
+    Check if the operating system is supported.
+    """
+
+    # store minimums as (major, minor) tuples
+    supported_os_min_version: dict[str, tuple[int, int]] = {
+        'ubuntu': (20, 10),  # in-kernel from 20.10 (22.04 recommended)
+        'debian': (11, 0),  # Bullseye
+        'centos': (9, 0),  # CentOS Stream 9 / RHEL 9
+        'rocky': (9, 0),
+        'almalinux': (9, 0),
+        'fedora': (32, 0),
+        'arch': (0, 0),  # rolling
+    }
+
+    os_id_lower = os_id.lower()
+    if os_id_lower not in supported_os_min_version:
+        return False
+
+    os_version_tuple = tuple(int(part) for part in os_version.split('.')[:2])
+
+    if os_id_lower not in supported_os_min_version:
+        print(f"Operating system {os_id_lower} is not supported.", file=sys.stderr)
+        return False
+
+    if os_version_tuple < supported_os_min_version[os_id_lower]:
+        print(
+            f"Detected OS version {os_version_tuple} is lower than the "
+            f"minimum supported version {supported_os_min_version[os_id_lower]} "
+            f"for {os_id_lower}.",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def install_wg_dependencies(os_id: str, os_version: str) -> None:
@@ -412,7 +448,7 @@ def install_wireguard_go() -> None:
         raise RuntimeError("/usr/local/bin is not on PATH.")
 
     # Check if wireguard-go is already installed
-    if shutil.which('wireguard') is not None:
+    if shutil.which('wireguard-go') is not None:
         print("wireguard-go is already installed, skipping installation.")
         return
 
