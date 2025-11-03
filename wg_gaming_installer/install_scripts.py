@@ -8,11 +8,19 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from prompt_scripts import server_if_prompt, server_wg_prompt
 from prompt_toolkit import prompt
-from shell_scripts import (
+
+from wg_gaming_installer.prompt_scripts import (
+    add_peer_prompt,
+    rm_peer_prompt,
+    server_if_prompt,
+    server_wg_prompt,
+)
+from wg_gaming_installer.shell_scripts import (
+    ServiceStatus,
     delete_folders,
     get_os_info,
+    get_wg_service_status,
     install_wg_dependencies,
     install_wireguard_go,
     is_os_supported,
@@ -22,14 +30,16 @@ from shell_scripts import (
     uninstall_wg_dependencies,
     uninstall_wireguard_go,
 )
-from sqlite_scripts import (
+from wg_gaming_installer.sqlite_scripts import (
     InstallStatus,
     OSInfo,
     PeerConfig,
     ServerIFConfig,
     ServerWGConfig,
+    add_peer_config,
     conf_db_connected,
     create_config_db,
+    delete_peer_config,
     read_all_peer_configs,
     read_install_status,
     read_os_info,
@@ -159,6 +169,9 @@ def create_wg_conf(
                 f.write(f"AllowedIPs = {peer.ipv4}/32\n")
             f.write("\n")
 
+    # Set file permissions to 600
+    wg_conf_path.chmod(0o600)
+
 
 def continue_install(state: InstallStatus) -> list[Callable[[], None]]:
     """
@@ -286,6 +299,62 @@ def server_if_setup_step() -> None:
         )
 
 
+def server_add_wg_peer_step() -> None:
+    """
+    Add a new WireGuard peer.
+    """
+    print("Adding a new WireGuard peer...")
+
+    # Read existing WG config and peers from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        wg_config: ServerWGConfig | None = read_wg_config(conn)
+        if not wg_config:
+            raise RuntimeError("WireGuard configuration not found in database.")
+        existing_peers: list[PeerConfig] = read_all_peer_configs(conn)
+
+    # Prompt user for new peer configuration
+    new_peer_config: PeerConfig = add_peer_prompt(
+        wg_config=wg_config, existing_peers=existing_peers
+    )
+
+    # Update database with new peer
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        add_peer_config(conn, new_peer_config)
+
+    print(f"Peer '{new_peer_config.name}' added successfully.")
+
+
+def server_rm_wg_peer_step() -> None:
+    """
+    Remove a WireGuard peer.
+    """
+    print("Stopping WireGuard service before removing peer...")
+
+    # If WireGuard is active, stop it first
+    need_restart: bool = False
+    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        need_restart = True
+        server_stop_wg_service_step()
+
+    # Read existing peers from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        existing_peers: list[PeerConfig] = read_all_peer_configs(conn)
+
+    # Prompt user to select peer to remove
+    peer_to_remove: PeerConfig | None = rm_peer_prompt(existing_peers=existing_peers)
+    if not peer_to_remove:
+        print("No peer selected for removal.")
+        return
+
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        delete_peer_config(conn, peer_to_remove.name)
+    print(f"Peer '{peer_to_remove.name}' removed successfully.")
+
+    if need_restart:
+        print("Restarting WireGuard service...")
+        server_start_wg_service_step()
+
+
 def server_wg_setup_step() -> None:
     """
     Configure server WireGuard interface.
@@ -356,6 +425,21 @@ def server_stop_wg_service_step() -> None:
     if wg_conf_path.exists():
         wg_conf_path.unlink()
     print("WireGuard service stopped successfully.")
+
+
+def server_get_wg_status_step() -> ServiceStatus:
+    """
+    Get the status of the WireGuard service on the server.
+    """
+    print("Getting WireGuard service status...")
+
+    # Read WG config from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        wg_config: ServerWGConfig | None = read_wg_config(conn)
+        if not wg_config:
+            raise RuntimeError("WireGuard configuration not found in database.")
+
+    return get_wg_service_status(wg_config.wg_name)
 
 
 def main_menu() -> None:
@@ -451,13 +535,11 @@ def main_menu() -> None:
         return
 
     if user_selection == 5:
-        print("Adding a new peer...")
-        print("Feature not yet implemented.")
+        server_add_wg_peer_step()
         return
 
     if user_selection == 6:
-        print("Removing a peer...")
-        print("Feature not yet implemented.")
+        server_rm_wg_peer_step()
         return
 
     if user_selection == 7:

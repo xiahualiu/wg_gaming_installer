@@ -225,6 +225,17 @@ def gen_wg_keypair() -> tuple[str, str]:
     return priv, pub
 
 
+def gen_wg_preshared_key() -> str:
+    # Create a WireGuard preshared key
+    if shutil.which('wg') is None:
+        raise RuntimeError("WireGuard 'wg' command not found in PATH.")
+    psk = subprocess.run(
+        ['wg', 'genpsk'], capture_output=True, text=True
+    ).stdout.strip()
+    assert psk, "Failed to generate WireGuard preshared key."
+    return psk
+
+
 def get_os_info() -> tuple[str, str]:
     """
     Get the operating system ID and version.
