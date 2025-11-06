@@ -300,8 +300,6 @@ def uninstall_wg_package_step() -> None:
     """
     Uninstall WireGuard server software.
     """
-    print("Uninstalling WireGuard server software...")
-
     # Read OS info from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
         os_info: OSInfo | None = read_os_info(conn)
