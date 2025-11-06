@@ -560,11 +560,7 @@ def uninstall_wireguard_go() -> None:
     """
     wg_go_path = Path('/usr/local/bin/wireguard-go')
     if wg_go_path.exists():
-        subprocess.run(
-            ['sudo', 'rm', '-f', str(wg_go_path)],
-            check=True,
-            capture_output=True,
-        )
+        wg_go_path.unlink()
         print("wireguard-go uninstalled successfully.")
     else:
         print("wireguard-go is not installed, skipping uninstallation.")
