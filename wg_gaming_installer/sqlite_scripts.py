@@ -8,6 +8,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import IntEnum, auto
+from ipaddress import IPv4Address, IPv4Interface, IPv6Address, IPv6Interface
 from pathlib import Path
 from textwrap import dedent
 from typing import Generator, Union
@@ -23,15 +24,15 @@ class OSInfo:
 @dataclass(frozen=True, slots=True)
 class ServerIFConfig:
     nic_name: str
-    nic_ipv4: str
-    nic_ipv6: str | None
+    nic_ipv4: IPv4Address
+    nic_ipv6: IPv6Address | None
 
 
 @dataclass(frozen=True, slots=True)
 class ServerWGConfig:
     wg_name: str
-    ipv4: str
-    ipv6: str | None
+    ipv4: IPv4Interface
+    ipv6: IPv6Interface | None
     listen_port: int
     private_key: str
     public_key: str
@@ -54,8 +55,8 @@ ForwardPort = Union[SinglePort, PortRange]
 @dataclass(frozen=True, slots=True)
 class PeerConfig:
     name: str
-    ipv4: str
-    ipv6: str | None
+    ipv4: IPv4Interface
+    ipv6: IPv6Interface | None
     public_key: str
     private_key: str
     preshared_key: str
@@ -370,8 +371,8 @@ def read_server_nic_config(db_conn: sqlite3.Connection) -> ServerIFConfig | None
     if row:
         return ServerIFConfig(
             nic_name=row["nic_name"],
-            nic_ipv4=row["nic_ipv4"],
-            nic_ipv6=row["nic_ipv6"],
+            nic_ipv4=IPv4Address(row["nic_ipv4"]),
+            nic_ipv6=IPv6Address(row["nic_ipv6"]) if row["nic_ipv6"] else None,
         )
     return None
 
@@ -396,8 +397,8 @@ def update_server_config(
         ),
         (
             server_config.nic_name,
-            server_config.nic_ipv4,
-            server_config.nic_ipv6,
+            str(server_config.nic_ipv4),
+            str(server_config.nic_ipv6) if server_config.nic_ipv6 else "",
         ),
     )
 
@@ -419,8 +420,8 @@ def read_wg_config(db_conn: sqlite3.Connection) -> ServerWGConfig | None:
     if row:
         return ServerWGConfig(
             wg_name=row["wg_name"],
-            ipv4=row["ipv4"],
-            ipv6=row["ipv6"] or None,
+            ipv4=IPv4Interface(row["ipv4"]),
+            ipv6=IPv6Interface(row["ipv6"]) if row["ipv6"] else None,
             listen_port=row["listen_port"],
             private_key=row["private_key"],
             public_key=row["public_key"],
@@ -453,8 +454,8 @@ def update_wg_config(db_conn: sqlite3.Connection, wg_config: ServerWGConfig) -> 
         ),
         (
             wg_config.wg_name,
-            wg_config.ipv4,
-            wg_config.ipv6 or "",
+            str(wg_config.ipv4),
+            str(wg_config.ipv6) if wg_config.ipv6 else "",
             wg_config.listen_port,
             wg_config.private_key,
             wg_config.public_key,
@@ -478,8 +479,8 @@ def read_all_peer_configs(db_conn: sqlite3.Connection) -> list[PeerConfig]:
         peer_configs.append(
             PeerConfig(
                 name=row["name"],
-                ipv4=row["ipv4"],
-                ipv6=row["ipv6"] if row["ipv6"] else None,
+                ipv4=IPv4Interface(row["ipv4"]),
+                ipv6=IPv6Interface(row["ipv6"]) if row["ipv6"] else None,
                 public_key=row["public_key"],
                 private_key=row["private_key"],
                 preshared_key=row["preshared_key"],
@@ -489,36 +490,26 @@ def read_all_peer_configs(db_conn: sqlite3.Connection) -> list[PeerConfig]:
     return peer_configs
 
 
-def read_peer_config(db_conn: sqlite3.Connection, peer_name: str) -> PeerConfig | None:
+def is_peer_exist(db_conn: sqlite3.Connection, peer_name: str) -> bool:
     """
-    Read a specific peer configuration from the database by peer name.
+    Check if a peer configuration exists in the database by peer name.
     Args:
         db_conn (sqlite3.Connection): The database connection object.
-        peer_name (str): The name of the peer to read.
+        peer_name (str): The name of the peer to check.
     Returns:
-        PeerConfig | None: The peer configuration if found, otherwise None.
+        bool: True if the peer exists, otherwise False.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
         dedent(
             """
-            SELECT * FROM peer_config WHERE name = ?;
+            SELECT 1 FROM peer_config WHERE name = ?;
             """
         ),
         (peer_name,),
     )
     row: sqlite3.Row | None = cur.fetchone()
-    if row:
-        return PeerConfig(
-            name=row["name"],
-            ipv4=row["ipv4"],
-            ipv6=row["ipv6"] if row["ipv6"] else None,
-            public_key=row["public_key"],
-            private_key=row["private_key"],
-            preshared_key=row["preshared_key"],
-            forward_ports=parse_forward_ports(row["forward_ports"]),
-        )
-    return None
+    return row is not None
 
 
 def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> None:
@@ -530,8 +521,7 @@ def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> Non
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     # Make sure peer with same name does not already exist
-    existing_peer: PeerConfig | None = read_peer_config(db_conn, peer_config.name)
-    if existing_peer is not None:
+    if is_peer_exist(db_conn, peer_config.name):
         raise ValueError(f"Peer with name '{peer_config.name}' already exists.")
 
     cur.execute(
@@ -551,8 +541,8 @@ def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> Non
         ),
         (
             peer_config.name,
-            peer_config.ipv4,
-            peer_config.ipv6 or "",
+            str(peer_config.ipv4),
+            str(peer_config.ipv6) if peer_config.ipv6 else "",
             peer_config.public_key,
             peer_config.private_key,
             peer_config.preshared_key,

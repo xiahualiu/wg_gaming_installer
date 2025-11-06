@@ -12,9 +12,10 @@ import logging
 from pathlib import Path
 
 import nftables
-from install_scripts import server_conf_db_path
-from shell_scripts import enable_forwarding_sysctl
-from sqlite_scripts import (
+
+from wg_gaming_installer.install_scripts import server_conf_db_path
+from wg_gaming_installer.shell_scripts import enable_forwarding_sysctl
+from wg_gaming_installer.sqlite_scripts import (
     PeerConfig,
     ServerIFConfig,
     conf_db_connected,
@@ -29,8 +30,11 @@ def main() -> None:
     # Read info from database at runtime (not at import time)
     db_path: Path = server_conf_db_path()
     with conf_db_connected(db_path) as conn:
-        server_cfg: ServerIFConfig = read_server_nic_config(conn)
+        server_cfg: ServerIFConfig | None = read_server_nic_config(conn)
         peer_cfgs: list[PeerConfig] = read_all_peer_configs(conn)
+
+    if server_cfg is None:
+        raise RuntimeError("Server NIC config not found in database.")
 
     # Flush existing rules
     nft.cmd('flush ruleset')
@@ -55,7 +59,7 @@ def main() -> None:
             if ports_str:
                 nft.cmd(
                     f'add rule ip nat prerouting iifname "{server_cfg.nic_name}" '
-                    f'tcp dport {{{ports_str}}} dnat to {peer.ipv4}'
+                    f'tcp dport {{{ports_str}}} dnat to {str(peer.ipv4.ip)}'
                 )
         else:
             raise ValueError(f'Peer {peer.name} has no IPv4, cannot setup IPv4 DNAT.')
@@ -82,7 +86,7 @@ def main() -> None:
                 if ports_str:
                     nft.cmd(
                         f'add rule ip6 nat prerouting iifname "{server_cfg.nic_name}" '
-                        f'tcp dport {{{ports_str}}} dnat to {peer.ipv6}'
+                        f'tcp dport {{{ports_str}}} dnat to {str(peer.ipv6.ip)}'
                     )
             else:
                 logging.error(f'Peer {peer.name} has no IPv6, skipping IPv6 DNAT.')

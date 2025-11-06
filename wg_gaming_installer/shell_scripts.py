@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 from enum import IntEnum, auto
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from socket import AddressFamily
 from typing import TYPE_CHECKING
@@ -114,44 +115,32 @@ def need_userspace_wireguard(tun_dev_path: Path) -> bool:
     return False
 
 
-def ifname_ipv4_ipv6(ifname: str) -> tuple[list[str], list[str]]:
+def nic_ipv4_ipv6(ifname: str) -> tuple[IPv4Address | None, IPv6Address | None]:
     """
     Return IPv4 address and IPv6 address of a given network interface.
     Args:
         ifname (str): The name of the network interface.
     Returns:
-        tuple[list[str], list[str]]: A tuple containing two lists:
-            - List of IPv4 addresses associated with the interface.
-            - List of IPv6 addresses associated with the interface.
+        tuple[IPv4Address | None, IPv6Address | None]: A tuple containing the
+        IPv4 address and IPv6 address of the interface, or None if not found.
     """
-    ipv4: list[str] = []
-    ipv6: list[str] = []
-    addrs: list[snicaddr] | tuple[()] = psutil.net_if_addrs().get(ifname, ())
+    ipv4: IPv4Address | None = None
+    ipv6: IPv6Address | None = None
+
+    nic_addrs_dict: dict[str, list[snicaddr]] = psutil.net_if_addrs()
+    if ifname not in nic_addrs_dict:
+        return None, None
+    addrs: list[snicaddr] = nic_addrs_dict[ifname]
     for a in addrs:
         if a.family == AddressFamily.AF_INET and not ipv4:
-            ipv4.append(a.address)
+            ipv4 = IPv4Address(a.address)
         # AF_INET6 may include a "%scope" suffix on Linux; strip it
         if a.family == AddressFamily.AF_INET6 and not ipv6:
-            ipv6.append(a.address.split('%')[0])
+            ipv6 = IPv6Address(a.address.split('%')[0])
     return ipv4, ipv6
 
 
-def validate_ipv4_address(ip: str) -> bool:
-    """
-    Validate if the given string is a valid IPv4 address.
-    Args:
-        ip (str): The IP address string to validate.
-    Returns:
-        bool: True if valid IPv4 address, False otherwise.
-    """
-    try:
-        socket.inet_pton(socket.AF_INET, ip)
-        return True
-    except OSError:
-        return False
-
-
-def validate_ifname(name: str) -> bool:
+def ifname_exists(name: str) -> bool:
     """
     Validate if the given string is a valid network interface name.
     Args:
@@ -171,9 +160,9 @@ def validate_ipv6_address(ip: str) -> bool:
         bool: True if valid IPv6 address, False otherwise.
     """
     try:
-        socket.inet_pton(socket.AF_INET6, ip)
+        IPv6Address(ip.strip())
         return True
-    except OSError:
+    except ValueError:
         return False
 
 
