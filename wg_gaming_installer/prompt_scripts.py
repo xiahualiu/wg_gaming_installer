@@ -556,7 +556,7 @@ def peer_forward_ports_prompt(
         return True
 
     user_input: str = prompt(
-        "Input the ports to forward (comma-separated, e.g., 80,443,27015-27030): "
+        "Input the ports to forward (comma-separated, e.g., 80,443,27000-27050): "
     ).strip()
 
     if not user_input:
