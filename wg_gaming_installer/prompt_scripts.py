@@ -767,7 +767,7 @@ def rm_peer_prompt(existing_peers: list[PeerConfig]) -> PeerConfig | None:
     confirm: str = (
         prompt(
             "Are you sure you want to remove peer "
-            f"'{existing_peers[selection]}'? (yes/no): "
+            f"'{existing_peers[selection].name}'? (yes/no): "
         )
         .strip()
         .lower()
