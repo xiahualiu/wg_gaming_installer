@@ -12,6 +12,7 @@ from prompt_toolkit import prompt
 
 from wg_gaming_installer.prompt_scripts import (
     add_peer_prompt,
+    rm_peer_prompt,
     select_peer_config_prompt,
     server_if_prompt,
     server_wg_prompt,
@@ -589,7 +590,7 @@ def main_menu() -> None:
         return
 
     if user_selection == 7:
-        selected_peer = select_peer_config_prompt(peer_configs)
+        selected_peer = rm_peer_prompt(peer_configs)
         if not selected_peer:
             return
         server_rm_wg_peer_step(selected_peer=selected_peer)
