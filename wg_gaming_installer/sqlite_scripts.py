@@ -256,7 +256,7 @@ def conf_db_connected(db_path: Path) -> Generator[sqlite3.Connection, None, None
     """
     if not db_path.parent.exists():
         raise FileNotFoundError(f"Directory {db_path.parent} does not exist.")
-    conn: sqlite3.Connection = sqlite3.connect(db_path)
+    conn: sqlite3.Connection = sqlite3.connect(database=db_path)
     conn.execute("BEGIN;")
     conn.row_factory = sqlite3.Row
     try:

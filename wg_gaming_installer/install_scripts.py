@@ -143,8 +143,8 @@ def create_wg_conf(
 
     # Read parameters from config db
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        wg_config: ServerWGConfig | None = read_wg_config(conn)
-        peer_config: list[PeerConfig] = read_all_peer_configs(conn)
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        peer_config: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
         if not wg_config:
             raise RuntimeError("WireGuard configuration not found in database.")
 
@@ -183,7 +183,9 @@ def create_wg_conf(
     wg_conf_path.chmod(0o600)
 
 
-def create_wg_peer_str(peer: PeerConfig, wg_config: ServerWGConfig) -> str:
+def create_wg_peer_str(
+    peer: PeerConfig, server_config: ServerIFConfig, wg_config: ServerWGConfig
+) -> str:
     """
     Generate a WireGuard configuration str for a peer.
     """
@@ -204,7 +206,7 @@ def create_wg_peer_str(peer: PeerConfig, wg_config: ServerWGConfig) -> str:
         peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0,::/0\n"
     else:
         peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0\n"
-    peer_wg_conf_str += f"Endpoint = {str(wg_config.ipv4.ip)}"
+    peer_wg_conf_str += f"Endpoint = {str(server_config.nic_ipv4)}"
     peer_wg_conf_str += ":"
     peer_wg_conf_str += f"{wg_config.listen_port}\n"
     peer_wg_conf_str += "PersistentKeepalive = 25\n"
@@ -252,7 +254,7 @@ def db_setup_step() -> None:
 
     # Create or reset the configuration database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        create_config_db(conn)
+        create_config_db(db_conn=conn)
         update_install_status(db_conn=conn, new_state=InstallStatus.DB_CREATED)
 
 
@@ -271,11 +273,11 @@ def install_wg_package_step() -> None:
 
     # Step 2: Install WireGuard and dependencies
     print("Installing WireGuard and dependencies...")
-    install_wg_dependencies(os_id, os_version)
+    install_wg_dependencies(os_id=os_id, os_version=os_version)
 
     # Check if userspace WireGuard is needed
     print("Checking if userspace WireGuard is needed...")
-    userspace_wg: bool = need_userspace_wireguard(tun_dev_path())
+    userspace_wg: bool = need_userspace_wireguard(tun_dev_path=tun_dev_path())
     if userspace_wg:
         print("OS virtualization type requires userspace WireGuard implementation.")
         prompt("Press Enter to continue with WireGuard-Go installation...")
@@ -302,7 +304,7 @@ def uninstall_wg_package_step() -> None:
     """
     # Read OS info from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        os_info: OSInfo | None = read_os_info(conn)
+        os_info: OSInfo | None = read_os_info(db_conn=conn)
         if not os_info:
             print("OS information not found in database.", file=sys.stderr)
             return
@@ -352,10 +354,13 @@ def server_add_wg_peer_step() -> None:
 
     # Read existing WG config and peers from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        wg_config: ServerWGConfig | None = read_wg_config(conn)
-        if not wg_config:
-            raise RuntimeError("WireGuard configuration not found in database.")
-        existing_peers: list[PeerConfig] = read_all_peer_configs(conn)
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        assert wg_config, "WireGuard configuration not found in database."
+        server_config: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
+        assert (
+            server_config
+        ), "Server network interface configuration not found in database."
+        existing_peers: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
 
     # Prompt user for new peer configuration
     new_peer_config: PeerConfig = add_peer_prompt(
@@ -364,17 +369,21 @@ def server_add_wg_peer_step() -> None:
 
     # Update database with new peer
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        add_peer_config(conn, new_peer_config)
+        add_peer_config(db_conn=conn, peer_config=new_peer_config)
 
     # Generate WireGuard peer configuration string
-    peer_wg_conf_str: str = create_wg_peer_str(new_peer_config, wg_config)
+    peer_wg_conf_str: str = create_wg_peer_str(
+        peer=new_peer_config,
+        server_config=server_config,
+        wg_config=wg_config,
+    )
 
     # Print the new peer WireGuard configuration
     print("\nNew peer WireGuard configuration:\n")
     print(peer_wg_conf_str)
 
     # QR code generation
-    qrencode_text_to_terminal(peer_wg_conf_str)
+    qrencode_text_to_terminal(text=peer_wg_conf_str)
 
     if need_restart:
         print("Restarting WireGuard service...")
@@ -396,7 +405,7 @@ def server_rm_wg_peer_step(selected_peer: PeerConfig) -> None:
         server_stop_wg_service_step()
 
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        delete_peer_config(conn, selected_peer.name)
+        delete_peer_config(db_conn=conn, peer_name=selected_peer.name)
     print(f"Peer '{selected_peer.name}' removed successfully.")
 
     if need_restart:
@@ -412,7 +421,7 @@ def server_wg_setup_step() -> None:
 
     # Check if server has IPv6 configured
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        server_conf: ServerIFConfig | None = read_server_nic_config(conn)
+        server_conf: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
         if not server_conf:
             raise RuntimeError("Server configuration not found in database.")
         has_ipv6: bool = server_conf.nic_ipv6 is not None
@@ -448,9 +457,9 @@ def server_start_wg_service_step() -> None:
             return
 
     # Create WireGuard configuration file
-    wg_conf_path: Path = server_wg_conf_path(wg_config.wg_name)
-    create_wg_conf(wg_conf_path)
-    start_wg_service(wg_config.wg_name)
+    wg_conf_path: Path = server_wg_conf_path(wg_nic_name=wg_config.wg_name)
+    create_wg_conf(wg_conf_path=wg_conf_path)
+    start_wg_service(wg_nic_name=wg_config.wg_name)
     print("WireGuard service started successfully.")
 
 
@@ -462,15 +471,15 @@ def server_stop_wg_service_step() -> None:
 
     # Read WG config from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        wg_config: ServerWGConfig | None = read_wg_config(conn)
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
         if not wg_config:
             print("WireGuard configuration not found in database.", file=sys.stderr)
             return
 
-    stop_wg_service(wg_config.wg_name)
+    stop_wg_service(wg_nic_name=wg_config.wg_name)
 
     # Remove WireGuard configuration file
-    wg_conf_path: Path = server_wg_conf_path(wg_config.wg_name)
+    wg_conf_path: Path = server_wg_conf_path(wg_nic_name=wg_config.wg_name)
     if wg_conf_path.exists():
         wg_conf_path.unlink()
     print("WireGuard service stopped successfully.")
@@ -484,11 +493,11 @@ def server_get_wg_status_step() -> ServiceStatus:
 
     # Read WG config from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        wg_config: ServerWGConfig | None = read_wg_config(conn)
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
         if not wg_config:
             raise RuntimeError("WireGuard configuration not found in database.")
 
-    return get_wg_service_status(wg_config.wg_name)
+    return get_wg_service_status(wg_nic_name=wg_config.wg_name)
 
 
 def main_menu() -> None:
@@ -498,10 +507,10 @@ def main_menu() -> None:
 
     # Load config from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        os_info: OSInfo | None = read_os_info(conn)
-        wg_config: ServerWGConfig | None = read_wg_config(conn)
-        server_config: ServerIFConfig | None = read_server_nic_config(conn)
-        peer_configs: list[PeerConfig] = read_all_peer_configs(conn)
+        os_info: OSInfo | None = read_os_info(db_conn=conn)
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        server_config: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
+        peer_configs: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
 
         if not os_info:
             print("OS information not found in database.", file=sys.stderr)
@@ -554,7 +563,7 @@ def main_menu() -> None:
     if user_selection == 3:
         confirm: bool = uninstall_wg_prompt()
         if confirm:
-            stop_wg_service(wg_config.wg_name)
+            stop_wg_service(wg_nic_name=wg_config.wg_name)
             uninstall_wg_package_step()
             uninstall_delete_folders()
             print("WireGuard service uninstalled successfully.")
@@ -574,13 +583,17 @@ def main_menu() -> None:
         return
 
     if user_selection == 5:
-        selected_peer = select_peer_config_prompt(peer_configs)
+        selected_peer = select_peer_config_prompt(peers=peer_configs)
         if not selected_peer:
             return
-        peer_wg_conf_str: str = create_wg_peer_str(selected_peer, wg_config)
+        peer_wg_conf_str: str = create_wg_peer_str(
+            peer=selected_peer,
+            server_config=server_config,
+            wg_config=wg_config,
+        )
         print("\nPeer WireGuard configuration:\n")
         print(peer_wg_conf_str)
-        qrencode_text_to_terminal(peer_wg_conf_str)
+        qrencode_text_to_terminal(text=peer_wg_conf_str)
         return
 
     if user_selection == 6:
@@ -588,7 +601,7 @@ def main_menu() -> None:
         return
 
     if user_selection == 7:
-        selected_peer = rm_peer_prompt(peer_configs)
+        selected_peer = rm_peer_prompt(existing_peers=peer_configs)
         if not selected_peer:
             return
         server_rm_wg_peer_step(selected_peer=selected_peer)
@@ -608,8 +621,8 @@ if __name__ == "__main__":
     # Continue installation from the beginning
     print("Reading installation status from database...")
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        status: InstallStatus = read_install_status(conn)
-        steps: list[Callable[[], None]] = continue_install(status)
+        status: InstallStatus = read_install_status(db_conn=conn)
+        steps: list[Callable[[], None]] = continue_install(state=status)
 
     # Execute installation steps
     for step in steps:
