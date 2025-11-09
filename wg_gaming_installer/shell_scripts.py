@@ -387,13 +387,7 @@ def uninstall_wg_dependencies(os_id: str, os_version: str) -> None:
     if os_l in ['ubuntu', 'debian']:
         pkgs = [
             'wireguard-tools',
-            'nftables',
-            'python3-nftables',
             'qrencode',
-            'curl',
-            'git',
-            'make',
-            'wget',
         ]
         subprocess.run(
             ['sudo', 'apt-get', 'autoremove', '-y'] + pkgs,
@@ -406,13 +400,7 @@ def uninstall_wg_dependencies(os_id: str, os_version: str) -> None:
         pkgs = [
             'kmod-wireguard',
             'wireguard-tools',
-            'nftables',
-            'python3-nftables',
             'qrencode',
-            'curl',
-            'git',
-            'make',
-            'wget',
         ]
         # prefer autoremove to clean up orphaned deps
         subprocess.run(
@@ -425,13 +413,7 @@ def uninstall_wg_dependencies(os_id: str, os_version: str) -> None:
     if os_l == 'fedora':
         pkgs = [
             'wireguard-tools',
-            'nftables',
-            'python3-nftables',
             'qrencode',
-            'curl',
-            'git',
-            'make',
-            'wget',
         ]
         subprocess.run(
             ['sudo', 'dnf', 'autoremove', '-y'] + pkgs,
@@ -443,13 +425,7 @@ def uninstall_wg_dependencies(os_id: str, os_version: str) -> None:
     if os_l == 'arch':
         pkgs = [
             'wireguard-tools',
-            'nftables',
-            'python-nftables',
             'qrencode',
-            'curl',
-            'git',
-            'make',
-            'wget',
         ]
         subprocess.run(
             ['sudo', 'pacman', '-Rns', '--noconfirm'] + pkgs,
