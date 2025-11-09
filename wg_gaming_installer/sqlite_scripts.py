@@ -8,7 +8,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import IntEnum, auto
-from ipaddress import IPv4Address, IPv4Interface, IPv6Address, IPv6Interface
+from ipaddress import IPv4Address, IPv4Interface, IPv6Address, IPv6Interface, ip_address
 from pathlib import Path
 from textwrap import dedent
 from typing import Generator, Union
@@ -57,6 +57,7 @@ class PeerConfig:
     name: str
     ipv4: IPv4Interface
     ipv6: IPv6Interface | None
+    dns: list[IPv4Address | IPv6Address]
     public_key: str
     private_key: str
     preshared_key: str
@@ -76,6 +77,27 @@ class PeerConfig:
             elif isinstance(item, PortRange):
                 ports_str_list.append(f"{item.start}-{item.end}")
         return ",".join(ports_str_list)
+
+    def dns_str(self) -> str:
+        """
+        Serialize DNS list to a comma-separated string.
+        """
+        return ",".join(str(dns_ip) for dns_ip in self.dns)
+
+    @staticmethod
+    def parse_dns(dns_str: str) -> list[IPv4Address | IPv6Address]:
+        """
+        Parse a comma-separated DNS string into a list of IP addresses.
+        """
+        dns_list: list[IPv4Address | IPv6Address] = []
+        if not dns_str:
+            return dns_list
+        entries = dns_str.split(",")
+        for entry in entries:
+            entry = entry.strip()
+            dns_ip = ip_address(entry)
+            dns_list.append(dns_ip)
+        return dns_list
 
 
 def parse_forward_ports(ports_str: str) -> list[ForwardPort]:
@@ -141,6 +163,7 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
         name            TEXT,
         ipv4            TEXT,
         ipv6            TEXT,
+        dns             TEXT,
         public_key      TEXT,
         private_key     TEXT,
         preshared_key   TEXT,
@@ -207,6 +230,7 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                 name     TEXT,
                 ipv4     TEXT,
                 ipv6     TEXT,
+                dns      TEXT,
                 public_key      TEXT,
                 private_key     TEXT,
                 preshared_key   TEXT,
@@ -481,6 +505,7 @@ def read_all_peer_configs(db_conn: sqlite3.Connection) -> list[PeerConfig]:
                 name=row["name"],
                 ipv4=IPv4Interface(row["ipv4"]),
                 ipv6=IPv6Interface(row["ipv6"]) if row["ipv6"] else None,
+                dns=PeerConfig.parse_dns(row["dns"]),
                 public_key=row["public_key"],
                 private_key=row["private_key"],
                 preshared_key=row["preshared_key"],
@@ -531,18 +556,20 @@ def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> Non
                 name,
                 ipv4,
                 ipv6,
+                dns,
                 public_key,
                 private_key,
                 preshared_key,
                 forward_ports
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """
         ),
         (
             peer_config.name,
             str(peer_config.ipv4),
             str(peer_config.ipv6) if peer_config.ipv6 else "",
+            peer_config.dns_str(),
             peer_config.public_key,
             peer_config.private_key,
             peer_config.preshared_key,

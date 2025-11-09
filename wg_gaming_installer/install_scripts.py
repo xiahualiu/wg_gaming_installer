@@ -197,6 +197,7 @@ def create_wg_peer_str(
         )
     else:
         peer_wg_conf_str += f"Address = {str(peer.ipv4.ip)}/32\n"
+    peer_wg_conf_str += f"DNS = {', '.join(str(dns) for dns in peer.dns)}\n"
     peer_wg_conf_str += f"PrivateKey = {peer.private_key}\n"
     peer_wg_conf_str += "\n"
     peer_wg_conf_str += "[Peer]\n"
@@ -578,6 +579,7 @@ def main_menu() -> None:
             print(f"Peer Name: {peer.name}")
             print(f"├─ IPv4: {peer.ipv4}")
             print(f"├─ IPv6: {peer.ipv6}")
+            print(f"├─ DNS Servers: {', '.join(str(dns) for dns in peer.dns)}")
             print(f"└─ Forwarded Ports: {peer.forward_ports_str()}")
             print("")
         return

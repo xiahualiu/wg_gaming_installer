@@ -1,6 +1,6 @@
 import socket
 import sys
-from ipaddress import IPv4Address, IPv4Interface, IPv6Address, IPv6Interface
+from ipaddress import IPv4Address, IPv4Interface, IPv6Address, IPv6Interface, ip_address
 
 from prompt_toolkit import prompt
 
@@ -50,11 +50,11 @@ def server_if_ipv4_ipv6_prompt(
         tuple[IPv4Address, IPv6Address | None] | None: The validated
         public IPv4 and IPv6 addresses of the server, or None if invalid.
     """
-    default_nic_ipv4s, default_nic_ipv6s = nic_ipv4_ipv6(server_nic_name)
+    default_ipv4, default_ipv6 = nic_ipv4_ipv6(server_nic_name)
 
     server_nic_ipv4_input: str = prompt(
         "Input the public IPv4 address of the server: ",
-        default=str(default_nic_ipv4s) if default_nic_ipv4s else "",
+        default=str(default_ipv4) if default_ipv4 else "",
     ).strip()
     try:
         server_nic_ipv4 = IPv4Address(server_nic_ipv4_input)
@@ -70,7 +70,7 @@ def server_if_ipv4_ipv6_prompt(
     if use_ipv6 in ['yes', 'y']:
         server_nic_ipv6_input: str = prompt(
             "Input the public IPv6 address of the server: ",
-            default=str(default_nic_ipv6s) if default_nic_ipv6s else "",
+            default=str(default_ipv6) if default_ipv6 else "",
         ).strip()
         try:
             server_nic_ipv6 = IPv6Address(server_nic_ipv6_input)
@@ -128,11 +128,10 @@ def server_if_prompt() -> ServerIFConfig:
 def validate_name(name: str) -> bool:
     if not name:
         return False
-    if len(name) > 15:
+    # match legacy script behavior: maximum 16 chars
+    if len(name) > 16:
         return False
-    # allow letters, digits, underscore, hyphen and dot
-    if not name[0].isalpha():
-        return False
+    # allow letters, digits, underscore, hyphen and dot (no leading-char restriction)
     if not all(c.isalnum() or c in {'_', '-', '.'} for c in name):
         return False
     return True
@@ -178,7 +177,7 @@ def wg_if_ipv6_prompt() -> IPv6Interface | None:
     Prompt the user for the WireGuard IPv6 interface.
 
     Returns:
-        IPv6Address | None: The validated WireGuard IPv6 interface or None if invalid.
+        IPv6Interface | None: The validated WireGuard IPv6 interface or None if invalid.
     """
     default_wg_ipv6: str = 'fd42:42:42::1/120'
     wg_ipv6: str = prompt(
@@ -207,12 +206,15 @@ def wg_if_listen_port_prompt(check_ipv6: bool) -> int | None:
     try:
         wg_listen_port: int = int(wg_listen_port_str)
     except ValueError:
+        print("Invalid listen port.", file=sys.stderr)
         return None
     if not validate_port_not_in_use(wg_listen_port, socket.AddressFamily.AF_INET):
+        print(f"Port {wg_listen_port} is already in use (IPv4).", file=sys.stderr)
         return None
     if check_ipv6 and not validate_port_not_in_use(
         wg_listen_port, socket.AddressFamily.AF_INET6
     ):
+        print(f"Port {wg_listen_port} is already in use (IPv6).", file=sys.stderr)
         return None
     return wg_listen_port
 
@@ -505,7 +507,7 @@ def peer_forward_ports_prompt(
         end_port: int = port_range.end
 
         # Check for valid port range
-        if start_port < 1 or end_port > 65535 or start_port >= end_port:
+        if start_port < 1 or end_port > 65535 or start_port > end_port:
             print(f"Invalid port range: {start_port}-{end_port}", file=sys.stderr)
             return False
 
@@ -520,7 +522,7 @@ def peer_forward_ports_prompt(
                 return False
 
         # Check for conflicts with WireGuard listen port
-        if wg_config.listen_port >= start_port and wg_config.listen_port <= end_port:
+        if start_port <= wg_config.listen_port <= end_port:
             print(
                 f"Port range {start_port}-{end_port} conflicts with "
                 f"WireGuard server listen port {wg_config.listen_port}.",
@@ -532,20 +534,16 @@ def peer_forward_ports_prompt(
         for peer in existing_peers:
             if peer.forward_ports:
                 for fp in peer.forward_ports:
-                    if (
-                        isinstance(fp, SinglePort)
-                        and fp.port >= start_port
-                        and fp.port <= end_port
-                    ):
-                        print(
-                            f"Port {p} is already forwarded by {peer.name}.",
-                            file=sys.stderr,
-                        )
-                        return False
+                    if isinstance(fp, SinglePort):
+                        if start_port <= fp.port <= end_port:
+                            print(
+                                f"Port {fp.port} is already forwarded by {peer.name}.",
+                                file=sys.stderr,
+                            )
+                            return False
                     elif isinstance(fp, PortRange):
-                        if (fp.start >= start_port and fp.start <= end_port) or (
-                            fp.end >= start_port and fp.end <= end_port
-                        ):
+                        # detect any overlap between ranges
+                        if not (fp.end < start_port or fp.start > end_port):
                             print(
                                 f"Port range {start_port}-{end_port} conflicts with "
                                 f"existing forwarded range {fp.start}-{fp.end} "
@@ -598,11 +596,39 @@ def peer_forward_ports_prompt(
     return forward_ports
 
 
+def peer_dns_prompt() -> list[IPv4Address | IPv6Address]:
+    """
+    Prompt the user for the peer's DNS servers.
+
+    Returns:
+        list[IPv4Address | IPv6Address]: The list of DNS server IP addresses.
+    """
+    dns_input: str = prompt(
+        "Input the DNS servers for the peer (comma-separated IPs): ",
+        default="1.1.1.1, 1.0.0.1",
+    ).strip()
+    dns_list: list[IPv4Address | IPv6Address] = []
+    if not dns_input:
+        return dns_list
+
+    entries = dns_input.split(",")
+    for entry in entries:
+        entry = entry.strip()
+        try:
+            dns_ip: IPv4Address | IPv6Address = ip_address(entry)
+        except ValueError:
+            print(f"Invalid DNS IP address: {entry}", file=sys.stderr)
+            continue
+        dns_list.append(dns_ip)
+    return dns_list
+
+
 def print_peer_summary(
     index: int,
     peer_name: str,
     peer_ipv4: IPv4Interface,
     peer_ipv6: IPv6Interface | None,
+    peer_dns: list[IPv4Address | IPv6Address],
     peer_forward_ports: list[ForwardPort],
 ) -> None:
     """
@@ -612,6 +638,9 @@ def print_peer_summary(
     print(f"  ├─ IPv4 Interface: {str(peer_ipv4)}")
     if peer_ipv6:
         print(f"  ├─ IPv6 Interface: {str(peer_ipv6)}")
+    print("  ├─ DNS Servers: ")
+    for dns in peer_dns:
+        print(f"  │   └─ {str(dns)}")
     if peer_forward_ports:
         print("  └─ Forwarded Ports:")
         for fp in peer_forward_ports:
@@ -663,6 +692,13 @@ def add_peer_prompt(
                     break
                 continue
 
+        while True:
+            peer_dns: list[IPv4Address | IPv6Address] = peer_dns_prompt()
+            if peer_dns:
+                break
+            print("At least one valid DNS server must be provided.", file=sys.stderr)
+            continue
+
         peer_forward_ports: list[ForwardPort] = []
         while True:
             enable_pf: str = (
@@ -690,6 +726,7 @@ def add_peer_prompt(
             peer_name=peer_name,
             peer_ipv4=peer_ipv4,
             peer_ipv6=peer_ipv6,
+            peer_dns=peer_dns,
             peer_forward_ports=peer_forward_ports,
         )
         user_confirm: str = (
@@ -713,6 +750,7 @@ def add_peer_prompt(
         name=peer_name,
         ipv4=peer_ipv4,
         ipv6=peer_ipv6,
+        dns=peer_dns,
         public_key=peer_public_key,
         private_key=peer_private_key,
         preshared_key=peer_preshared_key,
@@ -741,6 +779,7 @@ def rm_peer_prompt(existing_peers: list[PeerConfig]) -> PeerConfig | None:
             peer_name=peer.name,
             peer_ipv4=peer.ipv4,
             peer_ipv6=peer.ipv6,
+            peer_dns=peer.dns,
             peer_forward_ports=peer.forward_ports,
         )
         print("")
@@ -800,6 +839,7 @@ def select_peer_config_prompt(peers: list[PeerConfig]) -> PeerConfig | None:
             peer_name=peer.name,
             peer_ipv4=peer.ipv4,
             peer_ipv6=peer.ipv6,
+            peer_dns=peer.dns,
             peer_forward_ports=peer.forward_ports,
         )
         print("")
@@ -834,10 +874,11 @@ def uninstall_wg_prompt() -> bool:
             .strip()
             .lower()
         )
-        if confirm in ['yes', 'no']:
+        # accept both full and short answers, consistent with other prompts
+        if confirm in ['yes', 'y', 'no', 'n']:
             break
-        print("Invalid input, please enter 'yes' or 'no'.")
-    if confirm == 'no':
+        print("Invalid input, please enter 'yes'/'y' or 'no'/'n'.")
+    if confirm in ['no', 'n']:
         return False
     else:
         return True
