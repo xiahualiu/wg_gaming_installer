@@ -2,6 +2,8 @@
 WireGuard stop script to remove nftables rules and sysctl rules.
 """
 
+from __future__ import annotations
+
 import nftables
 
 from wg_gaming_installer.shell_scripts import disable_forwarding_sysctl

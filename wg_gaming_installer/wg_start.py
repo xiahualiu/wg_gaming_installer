@@ -8,6 +8,8 @@ and sets up NAT masquerading for outbound traffic on the WireGuard interface.
 Modify the rules as needed to fit your security requirements.
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 
@@ -55,7 +57,7 @@ def main() -> None:
     )
     for peer in peer_cfgs:
         if peer.ipv4:
-            ports_str = peer.forward_ports_str()
+            ports_str = peer.forward_ports_str
             if ports_str:
                 nft.cmd(
                     f'add rule ip nat prerouting iifname "{server_cfg.nic_name}" '
@@ -86,7 +88,7 @@ def main() -> None:
         )
         for peer in peer_cfgs:
             if peer.ipv6:
-                ports_str = peer.forward_ports_str()
+                ports_str = peer.forward_ports_str
                 if ports_str:
                     nft.cmd(
                         f'add rule ip6 nat prerouting iifname "{server_cfg.nic_name}" '

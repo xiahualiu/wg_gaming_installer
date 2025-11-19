@@ -63,6 +63,7 @@ class PeerConfig:
     preshared_key: str
     forward_ports: list[ForwardPort]
 
+    @property
     def forward_ports_str(self) -> str:
         """
         Serialize forward_ports to the DB string format:
@@ -573,7 +574,7 @@ def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> Non
             peer_config.public_key,
             peer_config.private_key,
             peer_config.preshared_key,
-            peer_config.forward_ports_str(),
+            peer_config.forward_ports_str,
         ),
     )
 

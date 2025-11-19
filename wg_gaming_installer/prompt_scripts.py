@@ -1,3 +1,9 @@
+"""
+Prompt scripts for WireGuard gaming installer.
+"""
+
+from __future__ import annotations
+
 import socket
 import sys
 from ipaddress import IPv4Address, IPv4Interface, IPv6Address, IPv6Interface, ip_address
@@ -290,7 +296,9 @@ def server_wg_prompt(has_ipv6: bool) -> ServerWGConfig:
 
 
 def peer_name_prompt(
-    wg_config: ServerWGConfig, existing_peers: list[PeerConfig]
+    wg_config: ServerWGConfig,
+    existing_peers: list[PeerConfig],
+    default_name: str | None = None,
 ) -> str | None:
     """
     Prompt the user for the peer's name.
@@ -298,11 +306,14 @@ def peer_name_prompt(
         wg_config (ServerWGConfig): The server's WireGuard configuration.
         existing_peers (list[PeerConfig]): List of existing peers to
         avoid name conflicts.
+        default_name (str | None): Optional default name for the peer.
 
     Returns:
         str | None: The validated peer name or None if invalid.
     """
-    peer_name: str = prompt("Input the name of the new peer: ").strip()
+    peer_name: str = prompt(
+        "Input the name of the new peer: ", default=default_name or ""
+    ).strip()
     if not validate_name(peer_name):
         print("Invalid peer name.")
         return None
@@ -447,7 +458,9 @@ def peer_ipv6_prompt(
 
 
 def peer_forward_ports_prompt(
-    wg_config: ServerWGConfig, existing_peers: list[PeerConfig]
+    wg_config: ServerWGConfig,
+    existing_peers: list[PeerConfig],
+    default_ports: str | None = None,
 ) -> list[ForwardPort]:
     """
     Prompt the user whether to enable port forwarding for the peer.
@@ -554,7 +567,8 @@ def peer_forward_ports_prompt(
         return True
 
     user_input: str = prompt(
-        "Input the ports to forward (comma-separated, e.g., 80,443,27000-27050): "
+        "Input the ports to forward (comma-separated, e.g., 80,443,27000-27050): ",
+        default=default_ports or "",
     ).strip()
 
     if not user_input:
@@ -709,6 +723,119 @@ def add_peer_prompt(
             if enable_pf in ['yes', 'y']:
                 peer_forward_ports = peer_forward_ports_prompt(
                     wg_config=wg_config, existing_peers=existing_peers
+                )
+                if peer_forward_ports:
+                    break
+                # Conflict detected, re-prompt
+                continue
+            else:
+                # No port forwarding
+                break
+
+        # Review inputs
+        print("")
+        print("Please review the new peer configuration:")
+        print_peer_summary(
+            index=len(existing_peers),
+            peer_name=peer_name,
+            peer_ipv4=peer_ipv4,
+            peer_ipv6=peer_ipv6,
+            peer_dns=peer_dns,
+            peer_forward_ports=peer_forward_ports,
+        )
+        user_confirm: str = (
+            prompt("Is this information correct? (yes/no): ").strip().lower()
+        )
+        if user_confirm in ['yes', 'y']:
+            break
+        else:
+            print("Let's try again.\n")
+            continue
+
+    # Generate WireGuard keypair for the peer
+    try:
+        peer_private_key, peer_public_key = gen_wg_keypair()
+        peer_preshared_key: str = gen_wg_preshared_key()
+    except Exception as e:
+        print(f"Error generating WireGuard keypair: {e}")
+        raise
+
+    return PeerConfig(
+        name=peer_name,
+        ipv4=peer_ipv4,
+        ipv6=peer_ipv6,
+        dns=peer_dns,
+        public_key=peer_public_key,
+        private_key=peer_private_key,
+        preshared_key=peer_preshared_key,
+        forward_ports=peer_forward_ports,
+    )
+
+
+def add_similar_peer_prompt(
+    wg_config: ServerWGConfig,
+    existing_peers: list[PeerConfig],
+    base_peer: PeerConfig,
+) -> PeerConfig:
+    """
+    Prompt the user to add another peer similar to an existing one.
+
+    Args:
+        wg_config (ServerWGConfig): The server's WireGuard configuration.
+        existing_peers (list[PeerConfig]): List of existing peers to
+        avoid name and IP conflicts.
+        base_peer (PeerConfig): The base peer configuration to copy from.
+
+    Returns:
+        PeerConfig: The configuration for the new peer.
+    """
+    print(f"Adding a new WireGuard peer similar to '{base_peer.name}'...")
+    while True:
+        while True:
+            peer_name: str | None = peer_name_prompt(
+                wg_config=wg_config,
+                existing_peers=existing_peers,
+                default_name=base_peer.name,
+            )
+            if peer_name:
+                break
+            continue
+
+        while True:
+            peer_ipv4: IPv4Interface | None = peer_ipv4_prompt(
+                wg_config, existing_peers
+            )
+            if peer_ipv4:
+                break
+            continue
+
+        peer_ipv6: IPv6Interface | None = None
+        if wg_config.ipv6:
+            while True:
+                peer_ipv6 = peer_ipv6_prompt(wg_config, existing_peers)
+                if peer_ipv6:
+                    break
+                continue
+
+        while True:
+            peer_dns: list[IPv4Address | IPv6Address] = peer_dns_prompt()
+            if peer_dns:
+                break
+            print("At least one valid DNS server must be provided.", file=sys.stderr)
+            continue
+
+        peer_forward_ports: list[ForwardPort] = []
+        while True:
+            enable_pf: str = (
+                prompt("Enable port forwarding for this peer? (yes/no): ", default="no")
+                .strip()
+                .lower()
+            )
+            if enable_pf in ['yes', 'y']:
+                peer_forward_ports = peer_forward_ports_prompt(
+                    wg_config=wg_config,
+                    existing_peers=existing_peers,
+                    default_ports=base_peer.forward_ports_str,
                 )
                 if peer_forward_ports:
                     break

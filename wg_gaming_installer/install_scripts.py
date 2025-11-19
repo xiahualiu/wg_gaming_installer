@@ -12,6 +12,7 @@ from prompt_toolkit import prompt
 
 from wg_gaming_installer.prompt_scripts import (
     add_peer_prompt,
+    add_similar_peer_prompt,
     rm_peer_prompt,
     select_peer_config_prompt,
     server_if_prompt,
@@ -170,7 +171,7 @@ def create_wg_conf(
         for peer in peer_config:
             f.write(f"[Peer] # {peer.name}\n")
             f.write(f"PublicKey = {peer.public_key}\n")
-            f.write(f"PreSharedKey = {peer.preshared_key}\n")
+            f.write(f"PresharedKey = {peer.preshared_key}\n")
             if peer.ipv6:
                 f.write(
                     f"AllowedIPs = {str(peer.ipv4.ip)}/32, {str(peer.ipv6.ip)}/128\n"
@@ -346,21 +347,14 @@ def server_add_wg_peer_step() -> None:
     """
     print("Adding a new WireGuard peer...")
 
-    # If WireGuard is active, stop it first
-    need_restart: bool = False
-    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
-        print("Stopping WireGuard service before adding peer...")
-        server_stop_wg_service_step()
-        need_restart = True
-
     # Read existing WG config and peers from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
-        assert wg_config, "WireGuard configuration not found in database."
         server_config: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
         assert (
             server_config
         ), "Server network interface configuration not found in database."
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        assert wg_config, "WireGuard configuration not found in database."
         existing_peers: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
 
     # Prompt user for new peer configuration
@@ -386,8 +380,9 @@ def server_add_wg_peer_step() -> None:
     # QR code generation
     qrencode_text_to_terminal(text=peer_wg_conf_str)
 
-    if need_restart:
-        print("Restarting WireGuard service...")
+    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        print("Restarting WireGuard service after adding new peer...")
+        server_stop_wg_service_step()
         server_start_wg_service_step()
 
     print(f"Peer '{new_peer_config.name}' added successfully.")
@@ -397,21 +392,51 @@ def server_rm_wg_peer_step(selected_peer: PeerConfig) -> None:
     """
     Remove a WireGuard peer.
     """
-    print("Stopping WireGuard service before removing peer...")
-
-    # If WireGuard is active, stop it first
-    need_restart: bool = False
-    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
-        need_restart = True
-        server_stop_wg_service_step()
+    print(f"Removing WireGuard peer '{selected_peer.name}'...")
 
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
         delete_peer_config(db_conn=conn, peer_name=selected_peer.name)
     print(f"Peer '{selected_peer.name}' removed successfully.")
 
-    if need_restart:
-        print("Restarting WireGuard service...")
+    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        print("Restarting WireGuard service after removing peer...")
+        server_stop_wg_service_step()
         server_start_wg_service_step()
+
+
+def server_edit_wg_peer_step(selected_peer: PeerConfig) -> None:
+    """
+    Edit a WireGuard peer.
+    """
+    print(f"Editing WireGuard peer '{selected_peer.name}'...")
+
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        server_config: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
+        assert (
+            server_config
+        ), "Server network interface configuration not found in database."
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        assert wg_config, "WireGuard configuration not found in database."
+
+        # First, delete the existing peer
+        delete_peer_config(db_conn=conn, peer_name=selected_peer.name)
+
+        existing_peers: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
+        modified_peer_config: PeerConfig = add_similar_peer_prompt(
+            wg_config=wg_config,
+            existing_peers=existing_peers,
+            base_peer=selected_peer,
+        )
+
+        # Add the modified peer back to the database
+        add_peer_config(db_conn=conn, peer_config=modified_peer_config)
+
+    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        print("Restarting WireGuard service after editing peer...")
+        server_stop_wg_service_step()
+        server_start_wg_service_step()
+
+    print(f"Peer '{selected_peer.name}' edited successfully.")
 
 
 def server_wg_setup_step() -> None:
@@ -452,7 +477,7 @@ def server_start_wg_service_step() -> None:
 
     # Read WG config from database
     with conf_db_connected(db_path=server_conf_db_path()) as conn:
-        wg_config: ServerWGConfig | None = read_wg_config(conn)
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
         if not wg_config:
             print("WireGuard configuration not found in database.", file=sys.stderr)
             return
@@ -526,42 +551,38 @@ def main_menu() -> None:
             return
 
     print("Welcome to the WireGuard Gaming Installer main menu!")
-    print("1. Stop WireGuard service (and disable on OS start up).")
-    print("2. Start WireGuard service (and enable on OS start up).")
-    print("3. Uninstall WireGuard service.")
-    print("4. List all peers.")
-    print("5. Show QR code & config for a peer.")
-    print("6. Add a new peer.")
-    print("7. Remove a peer.")
-    print("8. Exit.")
+    print(" 1. Stop WireGuard service (and disable on OS start up).")
+    print(" 2. Start WireGuard service (and enable on OS start up).")
+    print(" 3. Uninstall WireGuard service.")
+    print(" 4. List all peers.")
+    print(" 5. Show QR code & config for a peer.")
+    print(" 6. Add a new peer.")
+    print(" 7. Remove a peer.")
+    print(" 8. Edit peer.")
+    print(" 9. Exit.")
 
     user_input: str
     while True:
-        user_input = prompt("Please select an option from the menu [1-8] => ")
-        try:
-            user_selection = int(user_input)
-        except ValueError:
-            print("Invalid input, please enter a number between 1 and 8.")
-            continue
-        if user_selection not in [1, 2, 3, 4, 5, 6, 7, 8]:
+        user_input = prompt("Please select an option from the menu [1-9] => ").strip()
+        if user_input not in map(str, range(1, 10)):
             print("Invalid option, please try again.")
             continue
         break
 
     # Handle user input
-    if user_selection == 1:
+    if user_input == "1":
         print("Stopping WireGuard service...")
         server_stop_wg_service_step()
         print("WireGuard service stopped successfully.")
         return
 
-    if user_selection == 2:
+    if user_input == "2":
         print("Starting WireGuard service...")
         server_start_wg_service_step()
         print("WireGuard service started successfully.")
         return
 
-    if user_selection == 3:
+    if user_input == "3":
         confirm: bool = uninstall_wg_prompt()
         if confirm:
             stop_wg_service(wg_nic_name=wg_config.wg_name)
@@ -573,18 +594,18 @@ def main_menu() -> None:
             print("Uninstallation cancelled.")
             return
 
-    if user_selection == 4:
+    if user_input == "4":
         print("Listing all peers...")
         for peer in peer_configs:
             print(f"Peer Name: {peer.name}")
             print(f"├─ IPv4: {peer.ipv4}")
             print(f"├─ IPv6: {peer.ipv6}")
             print(f"├─ DNS Servers: {', '.join(str(dns) for dns in peer.dns)}")
-            print(f"└─ Forwarded Ports: {peer.forward_ports_str()}")
+            print(f"└─ Forwarded Ports: {peer.forward_ports_str}")
             print("")
         return
 
-    if user_selection == 5:
+    if user_input == "5":
         selected_peer = select_peer_config_prompt(peers=peer_configs)
         if not selected_peer:
             return
@@ -598,18 +619,25 @@ def main_menu() -> None:
         qrencode_text_to_terminal(text=peer_wg_conf_str)
         return
 
-    if user_selection == 6:
+    if user_input == "6":
         server_add_wg_peer_step()
         return
 
-    if user_selection == 7:
+    if user_input == "7":
         selected_peer = rm_peer_prompt(existing_peers=peer_configs)
         if not selected_peer:
             return
         server_rm_wg_peer_step(selected_peer=selected_peer)
         return
 
-    if user_selection == 8:
+    if user_input == "8":
+        selected_peer = select_peer_config_prompt(peers=peer_configs)
+        if not selected_peer:
+            return
+        server_edit_wg_peer_step(selected_peer=selected_peer)
+        return
+
+    if user_input == "9":
         print("Exiting main menu.")
         return
 
