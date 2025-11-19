@@ -61,6 +61,10 @@ def main() -> None:
                     f'add rule ip nat prerouting iifname "{server_cfg.nic_name}" '
                     f'tcp dport {{{ports_str}}} dnat to {str(peer.ipv4.ip)}'
                 )
+                nft.cmd(
+                    f'add rule ip nat prerouting iifname "{server_cfg.nic_name}" '
+                    f'udp dport {{{ports_str}}} dnat to {str(peer.ipv4.ip)}'
+                )
         else:
             raise ValueError(f'Peer {peer.name} has no IPv4, cannot setup IPv4 DNAT.')
 
