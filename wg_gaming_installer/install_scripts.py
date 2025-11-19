@@ -571,13 +571,11 @@ def main_menu() -> None:
 
     # Handle user input
     if user_input == "1":
-        print("Stopping WireGuard service...")
         server_stop_wg_service_step()
         print("WireGuard service stopped successfully.")
         return
 
     if user_input == "2":
-        print("Starting WireGuard service...")
         server_start_wg_service_step()
         print("WireGuard service started successfully.")
         return

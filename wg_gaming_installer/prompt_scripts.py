@@ -680,7 +680,6 @@ def add_peer_prompt(
     Returns:
         PeerConfig: The configuration for the new peer.
     """
-    print("Adding a new WireGuard peer...")
     while True:
         while True:
             peer_name: str | None = peer_name_prompt(

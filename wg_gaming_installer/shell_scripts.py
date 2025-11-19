@@ -627,7 +627,7 @@ def stop_wg_service(wg_nic_name: str) -> None:
     """
     Stop and disable the WireGuard service.
     """
-    print("Stopping and disabling WireGuard service")
+    print("Stopping and disabling WireGuard service...")
 
     subprocess.run(
         ['systemctl', 'disable', '--now', f'wg-quick@{wg_nic_name}'],
