@@ -47,7 +47,7 @@ Forwarding Minecraft TCP port `25565` to peer `10.66.66.2` makes `SERVER_PUBLIC_
 
 - A Linux host that meets the Supported platforms listed above.
 - Python 3.10 or newer and `python3-venv` package.
-- Root privileges for installation and to manage networking — run the installer as `root` (for example `sudo -i` or `sudo su -`).
+- `root` privileges for installation.
 
 Recommended: a fresh, non-production system. The installer modifies networking and firewall rules; avoid running on production hosts unless you understand the changes.
 
