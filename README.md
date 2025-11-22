@@ -37,9 +37,9 @@ The installer can optionally forward chosen ports from the server's public IP to
 
 The installer adds `nftables` DNAT rules on the server so incoming traffic on a public port is forwarded to the peer's WireGuard IP (IPv4 and IPv6 supported).
 
-### Quick example
+### Game example
 
-- Forwarding Minecraft TCP port `25565` to peer `10.66.66.2` makes `SERVER_PUBLIC_IP:25565` reach `10.66.66.2:25565`.
+Forwarding Minecraft TCP port `25565` to peer `10.66.66.2` makes `SERVER_PUBLIC_IP:25565` reach `10.66.66.2:25565`.
 
 **Note:** Do not forward a port that is already used by a local service on the server (SSH, etc.).
 
