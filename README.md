@@ -66,7 +66,7 @@ cd wg_gaming_installer
 Create a virtual environment and install the package in editable mode:
 
 ```bash
-python3 -m venv .venv
+python3 -m venv .venv --system-site-packages
 source .venv/bin/activate
 pip install -e .
 ```
