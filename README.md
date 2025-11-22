@@ -1,142 +1,131 @@
 [![ShellCheck](https://github.com/xiahualiu/wg_gaming_installer/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/xiahualiu/wg_gaming_installer/actions/workflows/shellcheck.yml)
 
-# WireGuard installer for Gaming
+# wg_gaming_installer — WireGuard installer and manager
 
-**Thank you for all the stars!**
+Small installer/manager for a WireGuard server, focused on personal gaming and lightweight use-cases. The repository contains the original `install.sh` (legacy) and a rewritten Python package `wg_gaming_installer` (recommended).
 
-This project is a bash script designed to set up a [WireGuard VPN](https://www.wireguard.com/) tailored for personal gaming or torrenting use. It now supports multiple WireGuard peers!
+## Why use the Python version
 
-## Rewrite in Python is in Progress!
+- Safer, clearer user prompts and input validation.
+- Uses SQLite to persist server and peer metadata.
+- Easier portability across Linux distributions via `distro` and other Python libraries.
 
-I am going to rewrite this script using python, which has better string manipulation and better data storage.
+> Note: This project is in active development (alpha). Use on non-production systems only.
 
-## Update Logs
+## Supported platforms
 
-- 09/29/2024 Major update.
-    - Added multi-peer support.
+The installer detects and supports the following distributions and minimum versions:
 
-- 09/23/2024 Major update.
-    - Added support for OpenVZ, LXC by installing wireguard-go.
-    - Switched from legacy `iptables` to `nftables` rules.
-    - Added shellcheck GitHub Action.
+| Distribution | Minimum version | Notes |
+|---|---:|---|
+| `ubuntu` | 20.10 | 22.04 recommended |
+| `debian` | 11 | Bullseye |
+| `centos` | 9 | CentOS Stream / RHEL 9 |
+| `rocky` | 9 | |
+| `almalinux` | 9 | |
+| `fedora` | 32 | |
+| `arch` | rolling | rolling release |
 
-- 10/08/2025 Minor update.
-    - Added an extra SNAT rule to the server nftable rules.
-        - The WG on the client side now only tunnels reply packets to WG server.
-        - Normal network traffic is no longer affected by the WG tunnel.
-    - Better `sysctl` control when turning on/off the WG service.
+- Requires a Linux host with a public IP address (or correctly configured NAT/public endpoint).
+- Works with both KVM and OpenVZ/LXC; on OpenVZ/LXC the implementation may use `wireguard-go` instead of the kernel module.
 
-## What it does
+## Port forwarding
 
-#### Before using WireGuard
+The installer can optionally forward chosen ports from the server's public IP to a peer's WireGuard address. This makes it easy to host a game server or fix NAT-related connectivity problems for a client.
 
-![](./imgs/before_wireguard.png)
+### How it works
 
-#### After using WireGuard
+The installer adds `nftables` DNAT rules on the server so incoming traffic on a public port is forwarded to the peer's WireGuard IP (IPv4 and IPv6 supported).
 
-![](./imgs/after_wireguard.png)
+### Quick example
 
-### NAT Improvement
+- Forwarding Minecraft TCP port `25565` to peer `10.66.66.2` makes `SERVER_PUBLIC_IP:25565` reach `10.66.66.2:25565`.
 
-Clients connecting to the VPN will immediately achieve a **Full Cone** NAT, the optimal network type for gaming and torrenting. To check your NAT type on Windows 10, use [NatTypeTester](https://github.com/HMBSbige/NatTypeTester)).
+### Notes
 
-With this script, you don’t need to enable port forwarding on your router or use DMZ settings. All the magic happens within WireGuard. Simply put:
+Do not forward a port that is already used by a local service on the server (SSH, web server, etc.).
 
->The local ports will be forwarded directly to the server.
+## Prerequisites
 
-This solves connection problems caused by strict NAT in scenarios like:
+- A Linux host that meets the Supported platforms listed above.
+- Python 3.10 or newer and `python3-venv` package.
+- Root privileges for installation and to manage networking — run the installer as `root` (for example `sudo -i` or `sudo su -`).
 
-1. Hosting a Minecraft, Terraria, or other game server online to play with friends, without needing to configure port forwarding on your router or if your ISP doesn’t provide a public IP.
-2. Playing P2P games like Monster Hunter: World or Overcooked! where NAT restrictions prevent connections with other players.
+Recommended: a fresh, non-production system. The installer modifies networking and firewall rules; avoid running on production hosts unless you understand the changes.
 
-For the best gaming experience, choose a server close to your region with low ping. Test the provider’s datacenter IP using their looking glass before purchasing a VPS.
 
-## Port Forwarding
+## Installation (recommended)
 
-The script port forwards client ports to corresponding ports on the server. **Ensure no other applications (like SSH) are using these ports on the server**, as this will interfere with any applications listening on those ports. It’s highly recommended to run this script on a fresh, empty system.
+**Important:** All commands in this section assume you are running as the `root` user. To become root, run `sudo -i` or `sudo su -` before proceeding.
 
-The script supports both IPv4 and IPv6.
-
-### Customize `nftables` rules
-
-You can customize the `nftables` rules by editing the `add-fullcone-nat.sh` file **before** running the installer script.
-
-If you need to edit the firewall rules after installation, the configuration file is located at `/etc/wireguard/add-fullcone-nat.sh`.
-
-* Stop the WireGuard service (via the script menu) before editing this file.
-* Do not remove or modify comments in this file.
-
-For detailed explanations of these nftables rules, refer to the blog post: [Understand routing and NAT with WireGuard VPN](https://xiahua.pages.dev/wg-route-nat/)
-
-## Requirements
-
-Supported distributions:
-
-- Debian >= 11
-- Ubuntu >= 20.04 (*Preferred*)
-- AlmaLinux
-- RockyLinux
-- ArchLinux
-- Fedora
-
-The script should work on any OS that supports nftables. More Linux distributions will be supported in the future after testing.
-
-It supports both KVM and OpenVZ/LXC virtualization types.
-
-For **OpenVZ** and **LXC** machines, [`wireguard-go`](https://github.com/WireGuard/wireguard-go) will be installed instead of the kernel WireGuard module. You’ll need to enable the TUN/TAP driver via your provider’s management panel.
-
-## Usage
-
-### Step 1: Upgrade Your OS
-
-Since WireGuard is a kernel module, you **must** upgrade the kernel to the latest version and reboot your server.
-
-```bash
-# If you are using Ubuntu/Debian, etc
-sudo apt update && sudo apt upgrade -y
-
-# If you are using Fedora, AlmaLinux, etc
-sudo dnf update -y
-
-# Arch, etc.
-sudo pacman -Syu
-
-# Reboot once
-sudo reboot
-```
-
-### Step 2: Download and Run the Script.
-
-Download and execute the script. The user running the script must have `sudo` privileges.
-
-Answer the questions prompted by the script, and it will handle the rest. For most VPS providers, you can simply press Enter through all the questions.
+Clone the repo.
 
 ```bash
 git clone https://github.com/xiahualiu/wg_gaming_installer.git
-cd ./wg_gaming_installer
+cd wg_gaming_installer
+```
+
+Create a virtual environment and install the package in editable mode:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+Run the installer (inside the virtualenv):
+
+```bash
+python -m wg_gaming_installer.install_scripts
+```
+
+## After installation
+
+Start the installer management menu (run inside the virtualenv and as `root`):
+
+```bash
+source .venv/bin/activate
+python -m wg_gaming_installer.install_scripts
+```
+
+The command opens an interactive WireGuard management menu with the following options:
+
+- `1` Stop WireGuard service (and disable it at OS startup)
+- `2` Start WireGuard service (and enable it at OS startup)
+- `3` Uninstall WireGuard service and remove generated files
+- `4` List all configured peers (shows IPv4/IPv6, DNS, forwarded ports)
+- `5` Show a peer's WireGuard configuration and display a QR code
+- `6` Add a new peer
+- `7` Remove an existing peer
+- `8` Edit a peer's configuration
+- `9` Exit the menu
+
+Notes:
+
+- Adding, removing, or editing peers will restart the WireGuard service automatically when necessary.
+- Peer configurations are printed to the terminal as well as a QR code so you can quickly import them on mobile clients.
+- The server WireGuard configuration file is written to `/etc/wireguard/<WG_NAME>.conf`. `PostUp/PostDown` hooks call the bundled `wg_start.py` and `wg_stop.py` scripts to apply nftables rules and IP forwarding.
+- The script stores runtime configuration in the local database at `~/.wireguard/server_conf.db` — you can inspect or back this up if desired.
+
+## Intallation (legacy)
+
+Run the legacy installer script `install.sh`
+
+```bash
 ./install.sh
 ```
 
-## Server Public IP Considerations 
+**Note:** The legacy installer is NOT compatible with the latest Python script, you need to stick to one after the installation.
 
-This script requires a server with a public IP address.
+## Troubleshooting
 
-Typically, the public IP is auto-detected. However, for some cloud providers like Google Cloud Platform or Oracle Cloud, the auto-detected IP might be a subnet IP (e.g., starting with `10.*.*.*`). In such cases, manually set the correct public IP.
+If the installer auto-detects a non-public IP (for example `10.x.x.x`), provide your public IP manually when prompted. 
+> This is highly likely to happen when you are using a cloud provider such as Google Cloud Platform, AWS, or Oracle Cloud.
 
-## Handling `ip_local_reserved_ports`
+On virtualized hosts (LXC/OpenVZ) you may need to **enable TUN/TAP** in your provider control panel.
 
-For more details on why the script reserves forwarded ports, see [my blog post](https://xiahua.pages.dev/wg-route-nat/#reserve-dnat-ports).
 
-On most KVM instances with newer kernels, the `net.ipv4.ip_local_reserved_ports` parameter is available, and the script will automatically reserve the ports. However, on older systems like OpenVZ or LXC instances, this parameter may not be available, and the script will display an error.
 
-If you encounter such errors, ensure the forwarded ports are not within the system’s **Ephemeral Port Range**, as these ports are used for outgoing connections.
+## License
 
-Check the ephemeral port range by:
-
-```bash
-sysctl net.ipv4.ip_local_port_range
-```
-
-## Managing WireGuard
-
-Run the script again to access options like stopping, restarting, uninstalling, listing clients, or adding/removing a client.
+This project is licensed under the MIT License — see `LICENSE` for details.
