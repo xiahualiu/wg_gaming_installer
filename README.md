@@ -20,11 +20,6 @@ The installer detects and supports the following distributions and minimum versi
 | :---: | :---:| :---: |
 | `ubuntu` | 20.10 | 22.04 recommended |
 | `debian` | 11 | Bullseye |
-| `centos` | 9 | CentOS Stream / RHEL 9 |
-| `rocky` | 9 | |
-| `almalinux` | 9 | |
-| `fedora` | 32 | |
-| `arch` | rolling | rolling release |
 
 - Requires a Linux host with a public IP address (or correctly configured NAT/public endpoint).
 - Works with both KVM and OpenVZ/LXC; on OpenVZ/LXC the implementation may use `wireguard-go` instead of the kernel module.
