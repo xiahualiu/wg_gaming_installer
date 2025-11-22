@@ -52,7 +52,7 @@ Forwarding Minecraft TCP port `25565` to peer `10.66.66.2` makes `SERVER_PUBLIC_
 Recommended: a fresh, non-production system. The installer modifies networking and firewall rules; avoid running on production hosts unless you understand the changes.
 
 
-## Installation (recommended)
+## Installation
 
 **Important:** All commands in this section assume you are running as the `root` user. To become root, run `sudo -i` or `sudo su -` before proceeding.
 
