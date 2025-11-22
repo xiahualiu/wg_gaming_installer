@@ -17,7 +17,7 @@ Small installer/manager for a WireGuard server, focused on personal gaming and l
 The installer detects and supports the following distributions and minimum versions:
 
 | Distribution | Minimum version | Notes |
-|---|---:|---|
+| :---: | :---:| :---: |
 | `ubuntu` | 20.10 | 22.04 recommended |
 | `debian` | 11 | Bullseye |
 | `centos` | 9 | CentOS Stream / RHEL 9 |
