@@ -2,7 +2,7 @@
 
 # wg_gaming_installer — WireGuard installer and manager
 
-Small installer/manager for a WireGuard server, focused on personal gaming and lightweight use-cases. The repository contains the original `install.sh` (legacy) and a rewritten Python package `wg_gaming_installer` (recommended).
+Small installer/manager for a WireGuard server, focused on personal gaming and lightweight use-cases. The repository contains the original `install.sh` (on `legacy_script` branch) and a rewritten Python package `wg_gaming_installer` (recommended).
 
 ## Why use the Python version
 
@@ -109,9 +109,10 @@ Notes:
 
 ## Intallation (legacy)
 
-Run the legacy installer script `install.sh`
+The legacy bash script can be found in the `legacy_script` branch if you prefer it.
 
 ```bash
+git switch legacy_script
 ./install.sh
 ```
 
