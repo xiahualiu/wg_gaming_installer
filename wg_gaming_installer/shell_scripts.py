@@ -404,7 +404,7 @@ def uninstall_wg_dependencies(os_id: str, os_version: str) -> None:
         ]
         # prefer autoremove to clean up orphaned deps
         subprocess.run(
-            ['sudo', 'dnf', 'autoremove', '-y'] + pkgs,
+            ['sudo', 'dnf', 'remove', '-y'] + pkgs,
             check=True,
             capture_output=True,
         )
@@ -416,7 +416,7 @@ def uninstall_wg_dependencies(os_id: str, os_version: str) -> None:
             'qrencode',
         ]
         subprocess.run(
-            ['sudo', 'dnf', 'autoremove', '-y'] + pkgs,
+            ['sudo', 'dnf', 'remove', '-y'] + pkgs,
             check=True,
             capture_output=True,
         )
