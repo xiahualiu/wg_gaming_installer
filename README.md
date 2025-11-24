@@ -1,5 +1,3 @@
-[![ShellCheck](https://github.com/xiahualiu/wg_gaming_installer/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/xiahualiu/wg_gaming_installer/actions/workflows/shellcheck.yml)
-
 # wg_gaming_installer — WireGuard installer & manager
 
 Lightweight installer/manager for a personal WireGuard server with optional port forwarding for gaming and similar use-cases. This repository contains the original bash installer (in the `legacy_script` branch) and a rewritten Python package `wg_gaming_installer` (recommended).
