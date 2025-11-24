@@ -37,7 +37,7 @@ line_length = 88
 
 [tool.flake8]
 max-line-length = 88
-extend-ignore = ["E203"]
+extend-ignore = ["E203", "E702", "E231"]
 
 [tool.mypy]
 python_version = "3.12"

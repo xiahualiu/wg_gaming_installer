@@ -542,52 +542,6 @@ def uninstall_wireguard_go() -> None:
         print("wireguard-go is not installed, skipping uninstallation.")
 
 
-def enable_forwarding_sysctl() -> None:
-    """
-    Enable IP forwarding for both IPv4 and IPv6.
-    """
-    print("Set sysctl to allow IP forwarding")
-
-    subprocess.run(
-        ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=1'],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ['sudo', 'sysctl', '-w', 'net.ipv6.conf.all.forwarding=1'],
-        check=True,
-        capture_output=True,
-    )
-
-
-def disable_forwarding_sysctl() -> None:
-    """
-    Disable IP forwarding for both IPv4 and IPv6.
-    """
-    print("Unset sysctl to disable IP forwarding")
-
-    subprocess.run(
-        ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ['sudo', 'sysctl', '-w', 'net.ipv6.conf.all.forwarding=0'],
-        check=True,
-        capture_output=True,
-    )
-
-    # Reload sysctl configuration files so persisted settings take effect
-    try:
-        subprocess.run(['sudo', 'sysctl', '--system'], check=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        print(
-            f"Failed to reload sysctl configs: {e.stderr.decode().strip()}",
-            file=sys.stderr,
-        )
-        raise
-
-
 def start_wg_service(wg_nic_name: str) -> None:
     """
     Start and enable the WireGuard service.
