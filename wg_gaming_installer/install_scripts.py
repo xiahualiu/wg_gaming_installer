@@ -1,0 +1,683 @@
+"""
+Main installation logic for WireGuard gaming installer.
+"""
+
+from __future__ import annotations
+
+import sys
+from collections.abc import Callable
+from pathlib import Path
+
+from prompt_toolkit import prompt
+
+from wg_gaming_installer.exec_scripts import (
+    create_nftables_config,
+    create_start_script,
+    create_stop_script,
+    create_wg_config,
+)
+from wg_gaming_installer.prompt_scripts import (
+    add_peer_prompt,
+    add_similar_peer_prompt,
+    rm_peer_prompt,
+    select_peer_config_prompt,
+    server_if_prompt,
+    server_wg_prompt,
+    uninstall_wg_prompt,
+)
+from wg_gaming_installer.shell_scripts import (
+    ServiceStatus,
+    delete_folders,
+    get_os_info,
+    get_wg_service_status,
+    install_wg_dependencies,
+    install_wireguard_go,
+    is_os_supported,
+    need_userspace_wireguard,
+    qrencode_text_to_terminal,
+    start_wg_service,
+    stop_wg_service,
+    uninstall_wg_dependencies,
+    uninstall_wireguard_go,
+)
+from wg_gaming_installer.sqlite_scripts import (
+    InstallStatus,
+    OSInfo,
+    PeerConfig,
+    ServerIFConfig,
+    ServerWGConfig,
+    add_peer_config,
+    conf_db_connected,
+    create_config_db,
+    delete_peer_config,
+    read_all_peer_configs,
+    read_install_status,
+    read_os_info,
+    read_server_nic_config,
+    read_wg_config,
+    update_install_status,
+    update_os_info,
+    update_server_config,
+    update_wg_config,
+)
+
+
+def wg_conf_folder() -> Path:
+    """
+    Returns the path to the WireGuard configuration folder.
+    Customizable.
+    """
+    return Path('/etc/wireguard')
+
+
+def server_conf_db_path() -> Path:
+    """
+    Returns the path to the server configuration file.
+    Customizable, but should be inside wg_conf_folder().
+    """
+    return wg_conf_folder() / 'server_conf.db'
+
+
+def start_script_path() -> Path:
+    """
+    Returns the path to the nftables configuration file.
+    Customizable.
+    """
+    return wg_conf_folder() / 'wg_start.sh'
+
+
+def stop_script_path() -> Path:
+    """
+    Returns the path to the nftables configuration file.
+    Customizable.
+    """
+    return wg_conf_folder() / 'wg_stop.sh'
+
+
+def nftables_conf_path() -> Path:
+    """
+    Returns the path to the nftables configuration file.
+    Customizable.
+    """
+    return wg_conf_folder() / 'wg.nft'
+
+
+def tun_dev_path() -> Path:
+    """
+    Returns the path to the TUN device.
+    Customizable.
+    """
+    return Path('/dev/net/tun')
+
+
+def shell_path() -> Path:
+    """
+    Returns the path to the system shell.
+    Customizable.
+    """
+    return Path('/bin/sh')
+
+
+def script_root_dir() -> Path:
+    """
+    Returns the path to the root directory of the script.
+    """
+    return Path(__file__).resolve().parent
+
+
+def script_python_bin() -> Path:
+    """
+    Returns the path to the Python binary used to run the script.
+    """
+    return Path(sys.executable)
+
+
+def uninstall_delete_folders() -> None:
+    """
+    Delete folders created by the installer.
+    """
+    delete_folders([wg_conf_folder()])
+
+
+def server_wg_conf_path(wg_nic_name: str) -> Path:
+    """
+    Returns the path to the WireGuard configuration file for the server.
+    Customizable.
+    """
+    return wg_conf_folder() / f"{wg_nic_name}.conf"
+
+
+def wg_start_script_path() -> Path:
+    """
+    Returns the path to the WireGuard start script.
+    """
+    return script_root_dir() / 'wg_start.py'
+
+
+def wg_stop_script_path() -> Path:
+    """
+    Returns the path to the WireGuard stop script.
+    """
+    return script_root_dir() / 'wg_stop.py'
+
+
+def create_wg_peer_str(
+    peer: PeerConfig, server_config: ServerIFConfig, wg_config: ServerWGConfig
+) -> str:
+    """
+    Generate a WireGuard configuration str for a peer.
+    """
+
+    peer_wg_conf_str = "[Interface]\n"
+    if peer.ipv6:
+        peer_wg_conf_str += (
+            f"Address = {str(peer.ipv4.ip)}/32, {str(peer.ipv6.ip)}/128\n"
+        )
+    else:
+        peer_wg_conf_str += f"Address = {str(peer.ipv4.ip)}/32\n"
+    peer_wg_conf_str += f"DNS = {', '.join(str(dns) for dns in peer.dns)}\n"
+    peer_wg_conf_str += f"PrivateKey = {peer.private_key}\n"
+    peer_wg_conf_str += "\n"
+    peer_wg_conf_str += "[Peer]\n"
+    peer_wg_conf_str += f"PublicKey = {wg_config.public_key}\n"
+    peer_wg_conf_str += f"PresharedKey = {peer.preshared_key}\n"
+    if wg_config.ipv6:
+        peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0,::/0\n"
+    else:
+        peer_wg_conf_str += "AllowedIPs = 0.0.0.0/0\n"
+    peer_wg_conf_str += f"Endpoint = {str(server_config.nic_ipv4)}"
+    peer_wg_conf_str += ":"
+    peer_wg_conf_str += f"{wg_config.listen_port}\n"
+    peer_wg_conf_str += "PersistentKeepalive = 25\n"
+    peer_wg_conf_str += "\n"
+
+    return peer_wg_conf_str
+
+
+def continue_install(state: InstallStatus) -> list[Callable[[], None]]:
+    """
+    Continue the installation process.
+    Returns a list of functions to be executed in order.
+    """
+
+    full_install_steps: list[Callable[[], None]] = [
+        db_setup_step,
+        install_wg_package_step,
+        server_if_setup_step,
+        server_wg_setup_step,
+    ]
+
+    if state == InstallStatus.NOT_STARTED:
+        return full_install_steps
+    elif state == InstallStatus.DB_CREATED:
+        return full_install_steps[1:]
+    elif state == InstallStatus.SW_INSTALLED:
+        return full_install_steps[2:]
+    elif state == InstallStatus.SERVER_IF_CONFIGURED:
+        return full_install_steps[3:]
+    elif state == InstallStatus.SERVER_WG_CONFIGURED:
+        return []
+    else:
+        raise RuntimeError("Unknown installation state.")
+
+
+def db_setup_step() -> None:
+    """
+    Pre-installation setup tasks.
+    """
+    print("Step 1: Setting up configuration database...")
+
+    # Create db parent folder if it doesn't exist
+    wg_conf_folder().mkdir(parents=True, exist_ok=True)
+
+    # Create or reset the configuration database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        create_config_db(db_conn=conn)
+        update_install_status(db_conn=conn, new_state=InstallStatus.DB_CREATED)
+
+
+def install_wg_package_step() -> None:
+    """
+    Main installation function for WireGuard server.
+    """
+    print("Step 2: Starting WireGuard server installation...")
+
+    # Step 1: Get OS information
+    os_id, os_version = get_os_info()
+    if not is_os_supported(os_id, os_version):
+        raise RuntimeError(f"Operating system {os_id} {os_version} is not supported.")
+
+    print(f"Detected operating system: {os_id} {os_version}")
+
+    # Step 2: Install WireGuard and dependencies
+    print("Installing WireGuard and dependencies...")
+    install_wg_dependencies(os_id=os_id, os_version=os_version)
+
+    # Check if userspace WireGuard is needed
+    print("Checking if userspace WireGuard is needed...")
+    userspace_wg: bool = need_userspace_wireguard(tun_dev_path=tun_dev_path())
+    if userspace_wg:
+        print("OS virtualization type requires userspace WireGuard implementation.")
+        prompt("Press Enter to continue with WireGuard-Go installation...")
+        install_wireguard_go()
+    else:
+        print("In-kernel WireGuard implementation is supported.")
+
+    # Step 3: update install status in database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        update_os_info(
+            db_conn=conn,
+            os_info=OSInfo(
+                os_name=os_id,
+                os_version=os_version,
+                userspace_wg=userspace_wg,
+            ),
+        )
+        update_install_status(db_conn=conn, new_state=InstallStatus.SW_INSTALLED)
+
+
+def uninstall_wg_package_step() -> None:
+    """
+    Uninstall WireGuard server software.
+    """
+    # Read OS info from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        os_info: OSInfo | None = read_os_info(db_conn=conn)
+        if not os_info:
+            print("OS information not found in database.", file=sys.stderr)
+            return
+
+    # Uninstall userspace WireGuard if installed
+    if os_info.userspace_wg:
+        print("Uninstalling userspace WireGuard (WireGuard-Go)...")
+        uninstall_wireguard_go()
+
+    # Uninstall WireGuard dependencies
+    print("Uninstalling WireGuard dependencies...")
+    uninstall_wg_dependencies(os_info.os_name, os_info.os_version)
+
+
+def server_if_setup_step() -> None:
+    """
+    Configure server network interface.
+    """
+    print("Step 3: Configuring server network interface...")
+
+    # Prompt user for server NIC configuration
+    server_if_config: ServerIFConfig = server_if_prompt()
+
+    # Update install status in database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        update_server_config(
+            db_conn=conn,
+            server_config=server_if_config,
+        )
+        update_install_status(
+            db_conn=conn, new_state=InstallStatus.SERVER_IF_CONFIGURED
+        )
+
+
+def server_add_wg_peer_step() -> None:
+    """
+    Add a new WireGuard peer.
+    """
+    print("Adding a new WireGuard peer...")
+
+    # Read existing WG config and peers from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        server_config: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
+        assert (
+            server_config
+        ), "Server network interface configuration not found in database."
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        assert wg_config, "WireGuard configuration not found in database."
+        existing_peers: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
+
+    # Prompt user for new peer configuration
+    new_peer_config: PeerConfig = add_peer_prompt(
+        wg_config=wg_config, existing_peers=existing_peers
+    )
+
+    # Update database with new peer
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        add_peer_config(db_conn=conn, peer_config=new_peer_config)
+
+    # Generate WireGuard peer configuration string
+    peer_wg_conf_str: str = create_wg_peer_str(
+        peer=new_peer_config,
+        server_config=server_config,
+        wg_config=wg_config,
+    )
+
+    # Print the new peer WireGuard configuration
+    print("\nNew peer WireGuard configuration:\n")
+    print(peer_wg_conf_str)
+
+    # QR code generation
+    qrencode_text_to_terminal(text=peer_wg_conf_str)
+
+    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        print("Restarting WireGuard service after adding new peer...")
+        server_stop_wg_service_step()
+        server_start_wg_service_step()
+
+    print(f"Peer '{new_peer_config.name}' added successfully.")
+
+
+def server_rm_wg_peer_step(selected_peer: PeerConfig) -> None:
+    """
+    Remove a WireGuard peer.
+    """
+    print(f"Removing WireGuard peer '{selected_peer.name}'...")
+
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        delete_peer_config(db_conn=conn, peer_name=selected_peer.name)
+    print(f"Peer '{selected_peer.name}' removed successfully.")
+
+    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        print("Restarting WireGuard service after removing peer...")
+        server_stop_wg_service_step()
+        server_start_wg_service_step()
+
+
+def server_edit_wg_peer_step(selected_peer: PeerConfig) -> None:
+    """
+    Edit a WireGuard peer.
+    """
+    print(f"Editing WireGuard peer '{selected_peer.name}'...")
+
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        server_config: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
+        assert (
+            server_config
+        ), "Server network interface configuration not found in database."
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        assert wg_config, "WireGuard configuration not found in database."
+
+        # First, delete the existing peer
+        delete_peer_config(db_conn=conn, peer_name=selected_peer.name)
+
+        existing_peers: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
+        modified_peer_config: PeerConfig = add_similar_peer_prompt(
+            wg_config=wg_config,
+            existing_peers=existing_peers,
+            base_peer=selected_peer,
+        )
+
+        # Add the modified peer back to the database
+        add_peer_config(db_conn=conn, peer_config=modified_peer_config)
+
+    if server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        print("Restarting WireGuard service after editing peer...")
+        server_stop_wg_service_step()
+        server_start_wg_service_step()
+
+    print(f"Peer '{selected_peer.name}' edited successfully.")
+
+
+def server_wg_setup_step() -> None:
+    """
+    Configure server WireGuard interface.
+    """
+    print("Step 4: Configuring server WireGuard interface...")
+
+    # Check if server has IPv6 configured
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        server_conf: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
+        if not server_conf:
+            raise RuntimeError("Server configuration not found in database.")
+        has_ipv6: bool = server_conf.nic_ipv6 is not None
+
+    # Prompt user for server WireGuard configuration
+    server_wg_config: ServerWGConfig = server_wg_prompt(has_ipv6=has_ipv6)
+
+    # Update install status in database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        update_wg_config(
+            db_conn=conn,
+            wg_config=server_wg_config,
+        )
+        update_install_status(
+            db_conn=conn, new_state=InstallStatus.SERVER_WG_CONFIGURED
+        )
+
+    # Start WireGuard service
+    server_start_wg_service_step()
+
+
+def server_start_wg_service_step() -> None:
+    """
+    Start the WireGuard service on the server.
+    """
+    print("Starting WireGuard service...")
+
+    # Read WG config from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        server_config: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
+        peer_configs: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
+        if not wg_config:
+            raise RuntimeError("WireGuard configuration not found in database.")
+        if not server_config:
+            raise RuntimeError("Server configuration not found in database.")
+
+    # Create WireGuard configuration file
+    wg_conf_path: Path = server_wg_conf_path(wg_nic_name=wg_config.wg_name)
+
+    # Generate WireGuard configuration file
+    create_wg_config(
+        wg_conf_path=wg_conf_path,
+        wg_config=wg_config,
+        peer_config=peer_configs,
+        start_script_path=start_script_path(),
+        stop_script_path=stop_script_path(),
+    )
+
+    # Generate start and stop scripts
+    create_start_script(
+        has_ipv6=bool(wg_config.ipv6),
+        shell_path=shell_path(),
+        start_script_path=start_script_path(),
+        nftables_conf_path=nftables_conf_path(),
+    )
+    create_stop_script(
+        has_ipv6=bool(wg_config.ipv6),
+        shell_path=shell_path(),
+        stop_script_path=stop_script_path(),
+    )
+
+    # Generate nftables configuration file
+    create_nftables_config(
+        wg_config=wg_config,
+        server_config=server_config,
+        peer_configs=peer_configs,
+        nftables_conf_path=nftables_conf_path(),
+    )
+
+    # Start WireGuard service
+    start_wg_service(wg_nic_name=wg_config.wg_name)
+    print("WireGuard service started successfully.")
+
+
+def server_stop_wg_service_step() -> None:
+    """
+    Stop the WireGuard service on the server.
+    """
+    print("Stopping WireGuard service...")
+
+    # Read WG config from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        if not wg_config:
+            print("WireGuard configuration not found in database.", file=sys.stderr)
+            return
+
+    stop_wg_service(wg_nic_name=wg_config.wg_name)
+
+    # Remove WireGuard configuration file
+    wg_conf_path: Path = server_wg_conf_path(wg_nic_name=wg_config.wg_name)
+    if wg_conf_path.exists():
+        wg_conf_path.unlink()
+
+    # Remove start and stop scripts
+    if start_script_path().exists():
+        start_script_path().unlink()
+    if stop_script_path().exists():
+        stop_script_path().unlink()
+
+    # Remove nftables configuration file
+    if nftables_conf_path().exists():
+        nftables_conf_path().unlink()
+
+    print("WireGuard service stopped successfully.")
+
+
+def server_get_wg_status_step() -> ServiceStatus:
+    """
+    Get the status of the WireGuard service on the server.
+    """
+    print("Getting WireGuard service status...")
+
+    # Read WG config from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        if not wg_config:
+            raise RuntimeError("WireGuard configuration not found in database.")
+
+    return get_wg_service_status(wg_nic_name=wg_config.wg_name)
+
+
+def main_menu() -> None:
+    """
+    Show the main menu after installation.
+    """
+
+    # Load config from database
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        os_info: OSInfo | None = read_os_info(db_conn=conn)
+        wg_config: ServerWGConfig | None = read_wg_config(db_conn=conn)
+        server_config: ServerIFConfig | None = read_server_nic_config(db_conn=conn)
+        peer_configs: list[PeerConfig] = read_all_peer_configs(db_conn=conn)
+
+        if not os_info:
+            print("OS information not found in database.", file=sys.stderr)
+            return
+
+        if not wg_config:
+            print("WireGuard configuration not found in database.", file=sys.stderr)
+            return
+
+        if not server_config:
+            print("Server configuration not found in database.", file=sys.stderr)
+            return
+
+    print("Welcome to the WireGuard Gaming Installer main menu!")
+    print(" 1. Stop WireGuard service (and disable on OS start up).")
+    print(" 2. Start WireGuard service (and enable on OS start up).")
+    print(" 3. Uninstall WireGuard service.")
+    print(" 4. List all peers.")
+    print(" 5. Show QR code & config for a peer.")
+    print(" 6. Add a new peer.")
+    print(" 7. Remove a peer.")
+    print(" 8. Edit peer.")
+    print(" 9. Exit.")
+
+    user_input: str
+    while True:
+        user_input = prompt("Please select an option from the menu [1-9] => ").strip()
+        if user_input not in map(str, range(1, 10)):
+            print("Invalid option, please try again.")
+            continue
+        break
+
+    # Handle user input
+    if user_input == "1":
+        server_stop_wg_service_step()
+        print("WireGuard service stopped successfully.")
+        return
+
+    if user_input == "2":
+        server_start_wg_service_step()
+        print("WireGuard service started successfully.")
+        return
+
+    if user_input == "3":
+        confirm: bool = uninstall_wg_prompt()
+        if confirm:
+            stop_wg_service(wg_nic_name=wg_config.wg_name)
+            uninstall_wg_package_step()
+            uninstall_delete_folders()
+            print("WireGuard service uninstalled successfully.")
+            return
+        else:
+            print("Uninstallation cancelled.")
+            return
+
+    if user_input == "4":
+        print("Listing all peers...")
+        for peer in peer_configs:
+            print(f"Peer Name: {peer.name}")
+            print(f"├─ IPv4: {peer.ipv4}")
+            print(f"├─ IPv6: {peer.ipv6}")
+            print(f"├─ DNS Servers: {', '.join(str(dns) for dns in peer.dns)}")
+            print(f"└─ Forwarded Ports: {peer.forward_ports_str}")
+            print("")
+        return
+
+    if user_input == "5":
+        selected_peer = select_peer_config_prompt(peers=peer_configs)
+        if not selected_peer:
+            return
+        peer_wg_conf_str: str = create_wg_peer_str(
+            peer=selected_peer,
+            server_config=server_config,
+            wg_config=wg_config,
+        )
+        print("\nPeer WireGuard configuration:\n")
+        print(peer_wg_conf_str)
+        qrencode_text_to_terminal(text=peer_wg_conf_str)
+        return
+
+    if user_input == "6":
+        server_add_wg_peer_step()
+        return
+
+    if user_input == "7":
+        selected_peer = rm_peer_prompt(existing_peers=peer_configs)
+        if not selected_peer:
+            return
+        server_rm_wg_peer_step(selected_peer=selected_peer)
+        return
+
+    if user_input == "8":
+        selected_peer = select_peer_config_prompt(peers=peer_configs)
+        if not selected_peer:
+            return
+        server_edit_wg_peer_step(selected_peer=selected_peer)
+        return
+
+    if user_input == "9":
+        print("Exiting main menu.")
+        return
+
+
+if __name__ == "__main__":
+    # Check if db exists
+    print("Checking if configuration database exists...")
+    if not server_conf_db_path().exists():
+        db_setup_step()
+
+    # Continue installation from the beginning
+    print("Reading installation status from database...")
+    with conf_db_connected(db_path=server_conf_db_path()) as conn:
+        status: InstallStatus = read_install_status(db_conn=conn)
+        steps: list[Callable[[], None]] = continue_install(state=status)
+
+    # Execute installation steps
+    for step in steps:
+        step()
+
+    print("Installation completed successfully.")
+
+    # Show main menu
+    main_menu()

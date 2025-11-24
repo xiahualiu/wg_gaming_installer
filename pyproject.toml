@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wg_gaming_installer"
+version = "0.1.0"
+description = "Small installer/manager for WireGuard server and clients (Python)"
+readme = "README.md"
+authors = [{ name = "xiahua" }]
+requires-python = ">=3.10"
+dependencies = [
+  "psutil>=5.9",
+  "prompt_toolkit>=3.0",
+  "distro>=1.8",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black>=24.0",
+  "isort>=5.12",
+  "flake8>=6.0",
+  "mypy>=1.9",
+  "pytest>=7.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+skip-string-normalization = true
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+line_length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "E702", "E231"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
