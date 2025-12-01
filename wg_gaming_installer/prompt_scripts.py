@@ -554,7 +554,7 @@ def peer_forward_ports_prompt(
                                 file=sys.stderr,
                             )
                             return False
-                    elif isinstance(fp, PortRange):
+                    else:
                         # detect any overlap between ranges
                         if not (fp.end < start_port or fp.start > end_port):
                             print(
@@ -660,7 +660,7 @@ def print_peer_summary(
         for fp in peer_forward_ports:
             if isinstance(fp, SinglePort):
                 print(f"    └─ Port: {fp.port}")
-            elif isinstance(fp, PortRange):
+            else:
                 print(f"    └─ Port Range: {fp.start}-{fp.end}")
     else:
         print("  └─ Forwarded Ports: None")
@@ -864,13 +864,26 @@ def add_similar_peer_prompt(
             print("Let's try again.\n")
             continue
 
-    # Generate WireGuard keypair for the peer
-    try:
-        peer_private_key, peer_public_key = gen_wg_keypair()
-        peer_preshared_key: str = gen_wg_preshared_key()
-    except Exception as e:
-        print(f"Error generating WireGuard keypair: {e}")
-        raise
+    while True:
+        # Prompt user to reuse keys or generate new ones
+        reuse_keys: str = (
+            prompt("Generate new WireGuard keys? (yes/no): ", default="no")
+            .strip()
+            .lower()
+        )
+        if reuse_keys in ['yes', 'y']:
+            try:
+                peer_private_key, peer_public_key = gen_wg_keypair()
+                peer_preshared_key: str = gen_wg_preshared_key()
+            except Exception as e:
+                print(f"Error generating WireGuard keypair: {e}")
+                raise
+            break
+        elif reuse_keys in ['no', 'n']:
+            peer_private_key = base_peer.private_key
+            peer_public_key = base_peer.public_key
+            peer_preshared_key = base_peer.preshared_key
+            break
 
     return PeerConfig(
         name=peer_name,
