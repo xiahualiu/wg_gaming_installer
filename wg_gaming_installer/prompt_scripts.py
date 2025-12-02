@@ -824,9 +824,13 @@ def add_similar_peer_prompt(
             continue
 
         peer_forward_ports: list[ForwardPort] = []
+        default_enable_pf: str = "yes" if base_peer.forward_ports else "no"
         while True:
             enable_pf: str = (
-                prompt("Enable port forwarding for this peer? (yes/no): ", default="no")
+                prompt(
+                    "Enable port forwarding for this peer? (yes/no): ",
+                    default=default_enable_pf,
+                )
                 .strip()
                 .lower()
             )
