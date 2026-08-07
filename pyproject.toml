@@ -17,12 +17,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "black>=24.0",
-  "isort>=5.12",
-  "mypy>=1.9",
+  "black==26.5.1",
+  "isort==8.0.1",
+  "mypy==2.3.0",
   "pytest>=7.0",
-  "pre-commit>=3.4",
-  "ruff>=0.6.0",
+  "pre-commit==4.6.1",
+  "ruff==0.16.2",
+  "pexpect>=4.8",
 ]
 
 [project.scripts]
@@ -57,4 +58,3 @@ ignore = ["E203", "E231", "E702"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-

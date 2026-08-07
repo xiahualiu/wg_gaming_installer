@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from wg_gaming_installer.sqlite_scripts import (
+    ForwardPort,
     InstallStatus,
     OSInfo,
     PeerConfig,
@@ -85,13 +86,16 @@ def test_parse_forward_ports_empty() -> None:
 
 
 def test_forward_ports_round_trip() -> None:
-    ports = [SinglePort(port=80), PortRange(start=1000, end=2000)]
+    ports: list[ForwardPort] = [SinglePort(port=80), PortRange(start=1000, end=2000)]
     peer = make_peer(forward_ports=ports)
     assert parse_forward_ports(peer.forward_ports_str) == ports
 
 
 def test_dns_round_trip() -> None:
-    dns = [IPv4Address("1.1.1.1"), IPv4Address("1.0.0.1")]
+    dns: list[IPv4Address | IPv6Address] = [
+        IPv4Address("1.1.1.1"),
+        IPv4Address("1.0.0.1"),
+    ]
     peer = make_peer(dns=dns)
     assert peer.dns_str() == "1.1.1.1,1.0.0.1"
     assert PeerConfig.parse_dns(peer.dns_str()) == dns

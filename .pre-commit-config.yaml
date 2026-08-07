@@ -1,36 +1,48 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
+      - id: check-ast
       - id: check-yaml
+      - id: check-toml
+      - id: check-json
       - id: check-added-large-files
       - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
 
   - repo: https://github.com/psf/black
-    rev: 23.9.1
+    rev: 26.5.1
     hooks:
       - id: black
         args: ["--line-length=88"]
         files: \.py$
 
   - repo: https://github.com/PyCQA/isort
-    rev: 5.12.0
+    rev: 8.0.1
     hooks:
       - id: isort
         args: ["--profile", "black", "--line-length=88"]
         files: \.py$
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.9.0
+    rev: v2.3.0
     hooks:
       - id: mypy
         args: ["--ignore-missing-imports", "--config-file=pyproject.toml"]
+        files: \.py$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.8
+    rev: v0.16.2
     hooks:
       - id: ruff
         args: ["--fix"]
         files: \.py$
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+        files: \.sh$
