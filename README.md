@@ -25,7 +25,15 @@ cd wg_gaming_installer
 python3 -m venv .venv --system-site-packages
 source .venv/bin/activate
 pip install -e .
-python -m wg_gaming_installer.install_scripts
+wg-gaming-installer
+```
+
+If you want to manage an existing installation:
+
+```bash
+cd wg_gaming_installer
+source ./.venv/bin/activate
+wg-gaming-installer
 ```
 
 ## Why the Python version
@@ -76,7 +84,8 @@ Important: do not forward ports already used by server-local services (SSH, etc.
 Recommended safe workflow:
 
 1. Stop the service from the management menu.
-2. Edit `wg_gaming_installer/exec_scripts.py` to change what the installer generates.
+2. Edit `wg_gaming_installer/exec_scripts.py` to change what the installer generates (WireGuard config, start/stop scripts, nftables rules).
+3. Edit the `Paths` dataclass in `wg_gaming_installer/install_scripts.py` to customize file locations (config folder, scripts, TUN device, shell).
 4. Restart the service using the management menu.
 
 ## Troubleshooting

@@ -25,6 +25,9 @@ dev = [
   "ruff>=0.6.0",
 ]
 
+[project.scripts]
+wg-gaming-installer = "wg_gaming_installer.install_scripts:main"
+
 [tool.setuptools.packages.find]
 include = ["wg_gaming_installer*"]
 

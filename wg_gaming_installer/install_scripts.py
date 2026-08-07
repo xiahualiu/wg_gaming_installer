@@ -616,7 +616,10 @@ def _main_menu() -> None:
     menu_actions[user_input]()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """
+    Entry point for the WireGuard Gaming Installer CLI.
+    """
     # Check if db exists
     print("Checking if configuration database exists...")
     if not _PATHS.server_conf_db_path.exists():
@@ -636,3 +639,7 @@ if __name__ == "__main__":
 
     # Show main menu
     _main_menu()
+
+
+if __name__ == "__main__":
+    main()
