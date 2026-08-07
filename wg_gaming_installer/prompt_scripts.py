@@ -6,7 +6,18 @@ from __future__ import annotations
 
 import socket
 import sys
-from ipaddress import IPv4Address, IPv4Interface, IPv6Address, IPv6Interface, ip_address
+from collections.abc import Callable
+from functools import partial
+from ipaddress import (
+    IPv4Address,
+    IPv4Interface,
+    IPv4Network,
+    IPv6Address,
+    IPv6Interface,
+    IPv6Network,
+    ip_address,
+)
+from typing import Any
 
 from prompt_toolkit import prompt
 
@@ -28,7 +39,25 @@ from wg_gaming_installer.sqlite_scripts import (
 )
 
 
-def server_if_name_prompt() -> str | None:
+def _prompt_until(prompt_fn: Callable[[], Any], error_msg: str | None = None) -> Any:
+    """
+    Repeatedly call prompt_fn until it returns a truthy value.
+
+    Args:
+        prompt_fn (Callable[[], Any]): The function that produces the value.
+        error_msg (str | None): Optional message printed when the value is
+        falsy. If None, nothing is printed (the prompt function is expected
+        to print its own error).
+    """
+    while True:
+        value = prompt_fn()
+        if value:
+            return value
+        if error_msg:
+            print(error_msg, file=sys.stderr)
+
+
+def _server_if_name_prompt() -> str | None:
     """
     Prompt the user for the server's network interface name.
 
@@ -44,7 +73,7 @@ def server_if_name_prompt() -> str | None:
     return None
 
 
-def server_if_ipv4_ipv6_prompt(
+def _server_if_ipv4_ipv6_prompt(
     server_nic_name: str,
 ) -> tuple[IPv4Address, IPv6Address | None] | None:
     """
@@ -92,33 +121,26 @@ def server_if_prompt() -> ServerIFConfig:
     """
     while True:
         # First get server NIC name
-        while True:
-            server_nic_name: str | None = server_if_name_prompt()
-            if not server_nic_name:
-                print('Invalid network interface name, please try again.')
-                continue
-            break
+        server_nic_name: str = _prompt_until(
+            _server_if_name_prompt, 'Invalid network interface name, please try again.'
+        )
 
         # Next get server NIC IPv4 and IPv6
-        while True:
-            server_if_ips: tuple[
-                IPv4Address, IPv6Address | None
-            ] | None = server_if_ipv4_ipv6_prompt(server_nic_name)
-            if not server_if_ips:
-                print('Invalid IP address(es), please try again.')
-                continue
-            server_nic_ipv4, server_nic_ipv6 = server_if_ips
-            break
+        server_if_ips: tuple[IPv4Address, IPv6Address | None] = _prompt_until(
+            partial(_server_if_ipv4_ipv6_prompt, server_nic_name),
+            'Invalid IP address(es), please try again.',
+        )
+        server_nic_ipv4, server_nic_ipv6 = server_if_ips
 
         # Review inputs
-        print("")
+        print()
         print("Please review the server network configuration:")
         print(f"└─ Interface Name: {server_nic_name}")
         if server_nic_ipv6:
-            print(f"   ├─ IPv4 Address: {str(server_nic_ipv4)}")
-            print(f"   └─ IPv6 Address: {str(server_nic_ipv6)}")
+            print(f"   ├─ IPv4 Address: {server_nic_ipv4!s}")
+            print(f"   └─ IPv6 Address: {server_nic_ipv6!s}")
         else:
-            print(f"   └─ IPv4 Address: {str(server_nic_ipv4)}")
+            print(f"   └─ IPv4 Address: {server_nic_ipv4!s}")
         confirm: str = prompt("Is this information correct? (yes/no): ").strip().lower()
         if confirm in ['yes', 'y']:
             return ServerIFConfig(
@@ -138,12 +160,10 @@ def validate_name(name: str) -> bool:
     if len(name) > 16:
         return False
     # allow letters, digits, underscore, hyphen and dot (no leading-char restriction)
-    if not all(c.isalnum() or c in {'_', '-', '.'} for c in name):
-        return False
-    return True
+    return all(c.isalnum() or c in {'_', '-', '.'} for c in name)
 
 
-def wg_if_name_prompt() -> str | None:
+def _wg_if_name_prompt() -> str | None:
     """
     Prompt the user for the WireGuard interface name.
 
@@ -160,7 +180,7 @@ def wg_if_name_prompt() -> str | None:
         return None
 
 
-def wg_if_ipv4_prompt() -> IPv4Interface | None:
+def _wg_if_ipv4_prompt() -> IPv4Interface | None:
     """
     Prompt the user for the WireGuard IPv4 interface.
 
@@ -178,7 +198,7 @@ def wg_if_ipv4_prompt() -> IPv4Interface | None:
         return None
 
 
-def wg_if_ipv6_prompt() -> IPv6Interface | None:
+def _wg_if_ipv6_prompt() -> IPv6Interface | None:
     """
     Prompt the user for the WireGuard IPv6 interface.
 
@@ -196,7 +216,7 @@ def wg_if_ipv6_prompt() -> IPv6Interface | None:
         return None
 
 
-def wg_if_listen_port_prompt(check_ipv6: bool) -> int | None:
+def _wg_if_listen_port_prompt(check_ipv6: bool) -> int | None:
     """
     Prompt the user for the WireGuard listen port.
     Args:
@@ -228,52 +248,39 @@ def wg_if_listen_port_prompt(check_ipv6: bool) -> int | None:
 def server_wg_prompt(has_ipv6: bool) -> ServerWGConfig:
     while True:
         # First get WireGuard NIC name
-        while True:
-            wg_nic_name: str | None = wg_if_name_prompt()
-            if not wg_nic_name:
-                print("Invalid WireGuard interface name, please try again.")
-                continue
-            break
+        wg_nic_name: str = _prompt_until(
+            _wg_if_name_prompt, "Invalid WireGuard interface name, please try again."
+        )
 
         # WireGuard IPv4 addresses
-        while True:
-            wg_ipv4: IPv4Interface | None = wg_if_ipv4_prompt()
-            if not wg_ipv4:
-                print("Invalid IPv4 address, please try again.")
-                continue
-            break
+        wg_ipv4: IPv4Interface = _prompt_until(
+            _wg_if_ipv4_prompt, "Invalid IPv4 address, please try again."
+        )
 
         # WireGuard IPv6 address (if applicable)
         wg_ipv6: IPv6Interface | None = None
         if has_ipv6:
-            while True:
-                wg_ipv6 = wg_if_ipv6_prompt()
-                if not wg_ipv6:
-                    print("Invalid IPv6 address, please try again.")
-                    continue
-                break
+            wg_ipv6 = _prompt_until(
+                _wg_if_ipv6_prompt, "Invalid IPv6 address, please try again."
+            )
         else:
             print(
                 "Skipping IPv6 configuration as server has no IPv6 address configured."
             )
 
         # WireGuard listen port
-        while True:
-            wg_listen_port: int | None = wg_if_listen_port_prompt(
-                check_ipv6=bool(wg_ipv6)
-            )
-            if not wg_listen_port:
-                print("Invalid listen port, please try again.")
-                continue
-            break
+        wg_listen_port: int = _prompt_until(
+            partial(_wg_if_listen_port_prompt, check_ipv6=bool(wg_ipv6)),
+            "Invalid listen port, please try again.",
+        )
 
         # Review inputs
-        print("")
+        print()
         print("Please review the WireGuard configuration:")
         print(f"└─ Interface Name: {wg_nic_name}")
-        print(f"   ├─ IPv4 Interface: {str(wg_ipv4)}")
+        print(f"   ├─ IPv4 Interface: {wg_ipv4!s}")
         if wg_ipv6:
-            print(f"   ├─ IPv6 Interface: {str(wg_ipv6)}")
+            print(f"   ├─ IPv6 Interface: {wg_ipv6!s}")
         print(f"   └─ Listen Port: {wg_listen_port}")
         confirm: str = prompt("Is this information correct? (yes/no): ").strip().lower()
         if confirm in ['yes', 'y']:
@@ -295,7 +302,7 @@ def server_wg_prompt(has_ipv6: bool) -> ServerWGConfig:
             continue
 
 
-def peer_name_prompt(
+def _peer_name_prompt(
     wg_config: ServerWGConfig,
     existing_peers: list[PeerConfig],
     default_name: str | None = None,
@@ -326,7 +333,91 @@ def peer_name_prompt(
     return peer_name
 
 
-def peer_ipv4_prompt(
+def _peer_ip_prompt(
+    wg_config: ServerWGConfig,
+    existing_peers: list[PeerConfig],
+    version: int,
+) -> IPv4Interface | IPv6Interface | None:
+    """
+    Generic prompt for a peer's WireGuard IPv4 or IPv6 interface.
+
+    Args:
+        wg_config (ServerWGConfig): The server's WireGuard configuration.
+        existing_peers (list[PeerConfig]): List of existing peers to
+        avoid IP conflicts.
+        version (int): 4 for IPv4 or 6 for IPv6.
+
+    Returns:
+        IPv4Interface | IPv6Interface | None: The validated interface or None.
+    """
+    if version == 4:
+        addr_cls: type[IPv4Address] | type[IPv6Address] = IPv4Address
+        iface_cls: type[IPv4Interface] | type[IPv6Interface] = IPv4Interface
+        server_addr: IPv4Address | IPv6Address = wg_config.ipv4.ip
+        network: IPv4Network | IPv6Network = wg_config.ipv4.network
+        label: str = 'IPv4'
+    else:
+        assert wg_config.ipv6 is not None, "Server WireGuard IPv6 config is required."
+        addr_cls = IPv6Address
+        iface_cls = IPv6Interface
+        server_addr = wg_config.ipv6.ip
+        network = wg_config.ipv6.network
+        label = 'IPv6'
+
+    # Build set of used addresses
+    used_addrs: set[int] = {int(server_addr)}
+    for peer in existing_peers:
+        if version == 4:
+            used_addrs.add(int(peer.ipv4.ip))
+        elif peer.ipv6:
+            used_addrs.add(int(peer.ipv6.ip))
+
+    # Suggest a default IP based on existing peers and server config
+    default_if: IPv4Address | IPv6Address | None = None
+    for host in network.hosts():
+        if int(host) not in used_addrs:
+            default_if = host
+            break
+
+    # If no available IPs
+    if not default_if:
+        print(
+            f"No available {label} addresses left in the WireGuard network.",
+            file=sys.stderr,
+        )
+        return None
+
+    # Prompt user for peer interface
+    peer_ip_input: str = prompt(
+        f"Input the WireGuard {label} interface of the new peer: ",
+        default=str(default_if),
+        rprompt=f"/{network.prefixlen}",
+    ).strip()
+
+    # Validate input
+    try:
+        peer_ip: IPv4Address | IPv6Address = addr_cls(peer_ip_input)
+    except ValueError:
+        print(f"Invalid {label} interface.", file=sys.stderr)
+        return None
+
+    # Check for IP conflicts
+    if int(peer_ip) in used_addrs:
+        print(f"{label} interface already in use.", file=sys.stderr)
+        return None
+
+    # Verify that the interface is within the server's WireGuard network
+    if peer_ip not in network:
+        print(
+            f"{label} interface is not within the server's WireGuard "
+            f"{label} network.",
+            file=sys.stderr,
+        )
+        return None
+    return iface_cls(f"{peer_ip}/{network.prefixlen}")
+
+
+def _peer_ipv4_prompt(
     wg_config: ServerWGConfig, existing_peers: list[PeerConfig]
 ) -> IPv4Interface | None:
     """
@@ -340,57 +431,13 @@ def peer_ipv4_prompt(
     Returns:
         IPv4Interface | None: The validated WireGuard IPv4 interface or None if invalid.
     """
-    # Suggest a default IP based on existing peers and server config
-    used_ips: set[int] = {int(wg_config.ipv4.ip)}
-    for peer in existing_peers:
-        used_ips.add(int(peer.ipv4.ip))
-
-    # Find the first unused IP address in the range
-    default_ipv4_if: IPv4Address | None = None
-    for host in wg_config.ipv4.network.hosts():
-        host_int: int = int(host)
-        if host_int not in used_ips:
-            default_ipv4_if = host
-            break
-
-    # If no available IPs
-    if not default_ipv4_if:
-        print(
-            "No available IPv4 addresses left in the WireGuard network.",
-            file=sys.stderr,
-        )
-        return None
-
-    # Prompt user for peer IPv4 interface
-    peer_ipv4_input: str = prompt(
-        "Input the WireGuard IPv4 interface of the new peer: ",
-        default=(f"{str(default_ipv4_if)}"),
-        rprompt=f"/{wg_config.ipv4.network.prefixlen}",
-    ).strip()
-
-    # Validate input
-    try:
-        peer_ipv4: IPv4Address = IPv4Address(peer_ipv4_input)
-    except ValueError:
-        print("Invalid IPv4 interface.", file=sys.stderr)
-        return None
-
-    # Check for IP conflicts
-    if int(peer_ipv4) in used_ips:
-        print("IPv4 interface already in use.", file=sys.stderr)
-        return None
-
-    # Verify that the IPv4 interface is within the server's WireGuard IPv4 network
-    if peer_ipv4 not in wg_config.ipv4.network:
-        print(
-            "IPv4 interface is not within the server's WireGuard IPv4 network.",
-            file=sys.stderr,
-        )
-        return None
-    return IPv4Interface(f"{peer_ipv4}/{wg_config.ipv4.network.prefixlen}")
+    result = _peer_ip_prompt(wg_config, existing_peers, version=4)
+    if isinstance(result, IPv4Interface):
+        return result
+    return None
 
 
-def peer_ipv6_prompt(
+def _peer_ipv6_prompt(
     wg_config: ServerWGConfig, existing_peers: list[PeerConfig]
 ) -> IPv6Interface | None:
     """
@@ -404,60 +451,13 @@ def peer_ipv6_prompt(
     Returns:
         IPv6Interface | None: The validated WireGuard IPv6 interface or None if invalid.
     """
-    # Ensure server has IPv6 config when calling this function
-    assert wg_config.ipv6 is not None, "Server WireGuard IPv6 config is required."
-
-    # Build set of used addresses
-    used_addrs: set[int] = {int(wg_config.ipv6.ip)}
-    for peer in existing_peers:
-        if peer.ipv6:
-            used_addrs.add(int(peer.ipv6.ip))
-
-    # Suggest a default IP based on existing peers and server config
-    default_ipv6_if: IPv6Address | None = None
-    for host in wg_config.ipv6.network.hosts():
-        if int(host) not in used_addrs:
-            default_ipv6_if = host
-            break
-
-    # If no available IPs
-    if not default_ipv6_if:
-        print(
-            "No available IPv6 addresses left in the WireGuard network.",
-            file=sys.stderr,
-        )
-        return None
-
-    # Prompt user for peer IPv6 interface
-    peer_ipv6_input: str = prompt(
-        "Input the WireGuard IPv6 interface of the new peer: ",
-        default=(f"{str(default_ipv6_if)}"),
-        rprompt=f"/{wg_config.ipv6.network.prefixlen}",
-    ).strip()
-
-    # Validate input
-    try:
-        peer_ipv6 = IPv6Address(peer_ipv6_input)
-    except ValueError:
-        print("Invalid IPv6 interface.", file=sys.stderr)
-        return None
-
-    # Check for IP conflicts
-    if int(peer_ipv6) in used_addrs:
-        print("IPv6 interface already in use.", file=sys.stderr)
-        return None
-
-    # Verify that the IPv6 interface is within the server's WireGuard IPv6 network
-    if peer_ipv6 not in wg_config.ipv6.network:
-        print(
-            "IPv6 interface is not within the server's WireGuard IPv6 network.",
-            file=sys.stderr,
-        )
-        return None
-    return IPv6Interface(f"{peer_ipv6}/{wg_config.ipv6.network.prefixlen}")
+    result = _peer_ip_prompt(wg_config, existing_peers, version=6)
+    if isinstance(result, IPv6Interface):
+        return result
+    return None
 
 
-def peer_forward_ports_prompt(
+def _peer_forward_ports_prompt(
     wg_config: ServerWGConfig,
     existing_peers: list[PeerConfig],
     default_ports: str | None = None,
@@ -610,7 +610,7 @@ def peer_forward_ports_prompt(
     return forward_ports
 
 
-def peer_dns_prompt() -> list[IPv4Address | IPv6Address]:
+def _peer_dns_prompt() -> list[IPv4Address | IPv6Address]:
     """
     Prompt the user for the peer's DNS servers.
 
@@ -649,12 +649,12 @@ def print_peer_summary(
     Print a concise summary of a peer configuration with index.
     """
     print(f"Peer #{index}: {peer_name}")
-    print(f"  ├─ IPv4 Interface: {str(peer_ipv4)}")
+    print(f"  ├─ IPv4 Interface: {peer_ipv4!s}")
     if peer_ipv6:
-        print(f"  ├─ IPv6 Interface: {str(peer_ipv6)}")
+        print(f"  ├─ IPv6 Interface: {peer_ipv6!s}")
     print("  ├─ DNS Servers: ")
     for dns in peer_dns:
-        print(f"  │   └─ {str(dns)}")
+        print(f"  │   └─ {dns!s}")
     if peer_forward_ports:
         print("  └─ Forwarded Ports:")
         for fp in peer_forward_ports:
@@ -667,164 +667,53 @@ def print_peer_summary(
 
 
 def add_peer_prompt(
-    wg_config: ServerWGConfig, existing_peers: list[PeerConfig]
-) -> PeerConfig:
-    """
-    Prompt the user to add another peer.
-
-    Args:
-        wg_config (ServerWGConfig): The server's WireGuard configuration.
-        existing_peers (list[PeerConfig]): List of existing peers to
-        avoid name and IP conflicts.
-
-    Returns:
-        PeerConfig: The configuration for the new peer.
-    """
-    while True:
-        while True:
-            peer_name: str | None = peer_name_prompt(
-                wg_config=wg_config, existing_peers=existing_peers
-            )
-            if peer_name:
-                break
-            continue
-
-        while True:
-            peer_ipv4: IPv4Interface | None = peer_ipv4_prompt(
-                wg_config, existing_peers
-            )
-            if peer_ipv4:
-                break
-            continue
-
-        peer_ipv6: IPv6Interface | None = None
-        if wg_config.ipv6:
-            while True:
-                peer_ipv6 = peer_ipv6_prompt(wg_config, existing_peers)
-                if peer_ipv6:
-                    break
-                continue
-
-        while True:
-            peer_dns: list[IPv4Address | IPv6Address] = peer_dns_prompt()
-            if peer_dns:
-                break
-            print("At least one valid DNS server must be provided.", file=sys.stderr)
-            continue
-
-        peer_forward_ports: list[ForwardPort] = []
-        while True:
-            enable_pf: str = (
-                prompt("Enable port forwarding for this peer? (yes/no): ", default="no")
-                .strip()
-                .lower()
-            )
-            if enable_pf in ['yes', 'y']:
-                peer_forward_ports = peer_forward_ports_prompt(
-                    wg_config=wg_config, existing_peers=existing_peers
-                )
-                if peer_forward_ports:
-                    break
-                # Conflict detected, re-prompt
-                continue
-            else:
-                # No port forwarding
-                break
-
-        # Review inputs
-        print("")
-        print("Please review the new peer configuration:")
-        print_peer_summary(
-            index=len(existing_peers),
-            peer_name=peer_name,
-            peer_ipv4=peer_ipv4,
-            peer_ipv6=peer_ipv6,
-            peer_dns=peer_dns,
-            peer_forward_ports=peer_forward_ports,
-        )
-        user_confirm: str = (
-            prompt("Is this information correct? (yes/no): ").strip().lower()
-        )
-        if user_confirm in ['yes', 'y']:
-            break
-        else:
-            print("Let's try again.\n")
-            continue
-
-    # Generate WireGuard keypair for the peer
-    try:
-        peer_private_key, peer_public_key = gen_wg_keypair()
-        peer_preshared_key: str = gen_wg_preshared_key()
-    except Exception as e:
-        print(f"Error generating WireGuard keypair: {e}")
-        raise
-
-    return PeerConfig(
-        name=peer_name,
-        ipv4=peer_ipv4,
-        ipv6=peer_ipv6,
-        dns=peer_dns,
-        public_key=peer_public_key,
-        private_key=peer_private_key,
-        preshared_key=peer_preshared_key,
-        forward_ports=peer_forward_ports,
-    )
-
-
-def add_similar_peer_prompt(
     wg_config: ServerWGConfig,
     existing_peers: list[PeerConfig],
-    base_peer: PeerConfig,
+    base_peer: PeerConfig | None = None,
 ) -> PeerConfig:
     """
-    Prompt the user to add another peer similar to an existing one.
+    Prompt the user to add a new peer, optionally similar to an existing one.
 
     Args:
         wg_config (ServerWGConfig): The server's WireGuard configuration.
         existing_peers (list[PeerConfig]): List of existing peers to
         avoid name and IP conflicts.
-        base_peer (PeerConfig): The base peer configuration to copy from.
+        base_peer (PeerConfig | None): Optional base peer configuration to
+        copy defaults (name, ports, keys) from.
 
     Returns:
         PeerConfig: The configuration for the new peer.
     """
-    print(f"Adding a new WireGuard peer similar to '{base_peer.name}'...")
+    if base_peer:
+        print(f"Adding a new WireGuard peer similar to '{base_peer.name}'...")
+
     while True:
-        while True:
-            peer_name: str | None = peer_name_prompt(
+        peer_name: str = _prompt_until(
+            lambda: _peer_name_prompt(
                 wg_config=wg_config,
                 existing_peers=existing_peers,
-                default_name=base_peer.name,
-            )
-            if peer_name:
-                break
-            continue
+                default_name=base_peer.name if base_peer else None,
+            ),
+        )
 
-        while True:
-            peer_ipv4: IPv4Interface | None = peer_ipv4_prompt(
-                wg_config, existing_peers
-            )
-            if peer_ipv4:
-                break
-            continue
+        peer_ipv4: IPv4Interface = _prompt_until(
+            lambda: _peer_ipv4_prompt(wg_config, existing_peers),
+        )
 
         peer_ipv6: IPv6Interface | None = None
         if wg_config.ipv6:
-            while True:
-                peer_ipv6 = peer_ipv6_prompt(wg_config, existing_peers)
-                if peer_ipv6:
-                    break
-                continue
+            peer_ipv6 = _prompt_until(
+                lambda: _peer_ipv6_prompt(wg_config, existing_peers),
+            )
 
-        while True:
-            peer_dns: list[IPv4Address | IPv6Address] = peer_dns_prompt()
-            if peer_dns:
-                break
-            print("At least one valid DNS server must be provided.", file=sys.stderr)
-            continue
+        peer_dns: list[IPv4Address | IPv6Address] = _prompt_until(
+            _peer_dns_prompt, "At least one valid DNS server must be provided."
+        )
 
         peer_forward_ports: list[ForwardPort] = []
-        default_enable_pf: str = "yes" if base_peer.forward_ports else "no"
+        default_enable_pf: str = (
+            "yes" if (base_peer and base_peer.forward_ports) else "no"
+        )
         while True:
             enable_pf: str = (
                 prompt(
@@ -835,21 +724,20 @@ def add_similar_peer_prompt(
                 .lower()
             )
             if enable_pf in ['yes', 'y']:
-                peer_forward_ports = peer_forward_ports_prompt(
+                peer_forward_ports = _peer_forward_ports_prompt(
                     wg_config=wg_config,
                     existing_peers=existing_peers,
-                    default_ports=base_peer.forward_ports_str,
+                    default_ports=base_peer.forward_ports_str if base_peer else None,
                 )
                 if peer_forward_ports:
                     break
                 # Conflict detected, re-prompt
                 continue
-            else:
-                # No port forwarding
-                break
+            # No port forwarding
+            break
 
         # Review inputs
-        print("")
+        print()
         print("Please review the new peer configuration:")
         print_peer_summary(
             index=len(existing_peers),
@@ -864,30 +752,33 @@ def add_similar_peer_prompt(
         )
         if user_confirm in ['yes', 'y']:
             break
-        else:
-            print("Let's try again.\n")
-            continue
+        print("Let's try again.\n")
 
-    while True:
+    if base_peer:
         # Prompt user to reuse keys or generate new ones
-        reuse_keys: str = (
-            prompt("Generate new WireGuard keys? (yes/no): ", default="no")
-            .strip()
-            .lower()
-        )
-        if reuse_keys in ['yes', 'y']:
-            try:
+        while True:
+            reuse_keys: str = (
+                prompt("Generate new WireGuard keys? (yes/no): ", default="no")
+                .strip()
+                .lower()
+            )
+            if reuse_keys in ['yes', 'y']:
                 peer_private_key, peer_public_key = gen_wg_keypair()
-                peer_preshared_key: str = gen_wg_preshared_key()
-            except Exception as e:
-                print(f"Error generating WireGuard keypair: {e}")
-                raise
-            break
-        elif reuse_keys in ['no', 'n']:
-            peer_private_key = base_peer.private_key
-            peer_public_key = base_peer.public_key
-            peer_preshared_key = base_peer.preshared_key
-            break
+                peer_preshared_key = gen_wg_preshared_key()
+                break
+            if reuse_keys in ['no', 'n']:
+                peer_private_key = base_peer.private_key
+                peer_public_key = base_peer.public_key
+                peer_preshared_key = base_peer.preshared_key
+                break
+    else:
+        # Generate WireGuard keypair for the peer
+        try:
+            peer_private_key, peer_public_key = gen_wg_keypair()
+            peer_preshared_key = gen_wg_preshared_key()
+        except Exception as e:
+            print(f"Error generating WireGuard keypair: {e}")
+            raise
 
     return PeerConfig(
         name=peer_name,
@@ -925,7 +816,7 @@ def rm_peer_prompt(existing_peers: list[PeerConfig]) -> PeerConfig | None:
             peer_dns=peer.dns,
             peer_forward_ports=peer.forward_ports,
         )
-        print("")
+        print()
 
     while True:
         selection_str: str = prompt(
@@ -985,7 +876,7 @@ def select_peer_config_prompt(peers: list[PeerConfig]) -> PeerConfig | None:
             peer_dns=peer.dns,
             peer_forward_ports=peer.forward_ports,
         )
-        print("")
+        print()
     selected_idx: int
     while True:
         user_input = prompt(f"Please select a peer [0-{len(peers)-1}] => ")
@@ -1021,7 +912,4 @@ def uninstall_wg_prompt() -> bool:
         if confirm in ['yes', 'y', 'no', 'n']:
             break
         print("Invalid input, please enter 'yes'/'y' or 'no'/'n'.")
-    if confirm in ['no', 'n']:
-        return False
-    else:
-        return True
+    return confirm not in ['no', 'n']

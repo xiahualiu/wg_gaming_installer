@@ -19,10 +19,14 @@ dependencies = [
 dev = [
   "black>=24.0",
   "isort>=5.12",
-  "flake8>=6.0",
   "mypy>=1.9",
   "pytest>=7.0",
+  "pre-commit>=3.4",
+  "ruff>=0.6.0",
 ]
+
+[tool.setuptools.packages.find]
+include = ["wg_gaming_installer*"]
 
 [tool.black]
 line-length = 88
@@ -35,11 +39,19 @@ multi_line_output = 3
 include_trailing_comma = true
 line_length = 88
 
-[tool.flake8]
-max-line-length = 88
-extend-ignore = ["E203", "E702", "E231"]
-
 [tool.mypy]
 python_version = "3.12"
 strict = false
 ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E203", "E231", "E702"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

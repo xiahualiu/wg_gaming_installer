@@ -5,13 +5,13 @@ SQLite related utility functions for WireGuard gaming installer.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import IntEnum, auto
 from ipaddress import IPv4Address, IPv4Interface, IPv6Address, IPv6Interface, ip_address
 from pathlib import Path
 from textwrap import dedent
-from typing import Generator, Union
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +49,7 @@ class PortRange:
     end: int
 
 
-ForwardPort = Union[SinglePort, PortRange]
+ForwardPort = SinglePort | PortRange
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +75,7 @@ class PeerConfig:
         for item in self.forward_ports:
             if isinstance(item, SinglePort):
                 ports_str_list.append(str(item.port))
-            elif isinstance(item, PortRange):
+            else:
                 ports_str_list.append(f"{item.start}-{item.end}")
         return ",".join(ports_str_list)
 
@@ -133,6 +133,12 @@ class InstallStatus(IntEnum):
     UNKNOWN = auto()
 
 
+# InstallStatus members that may be persisted in the database (UNKNOWN is not storable).
+_STORED_INSTALL_STATUSES: list[str] = [
+    member.name for member in InstallStatus if member is not InstallStatus.UNKNOWN
+]
+
+
 def create_config_db(db_conn: sqlite3.Connection) -> None:
     """
     Create or reset the SQLite database table used to store WireGuard configurations.
@@ -183,34 +189,24 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
     cur.execute("DROP TABLE IF EXISTS peer_config;")
     cur.execute("DROP TABLE IF EXISTS install_status;")
 
-    cur.execute(
-        dedent(
-            """
+    cur.execute(dedent("""
             CREATE TABLE os_info (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 os_name TEXT,
                 os_version TEXT,
                 userspace_wg BOOLEAN
             );
-            """
-        )
-    )
+            """))
 
-    cur.execute(
-        dedent(
-            """
+    cur.execute(dedent("""
             CREATE TABLE server_nic_config (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 nic_name TEXT,
                 nic_ipv4 TEXT,
                 nic_ipv6 TEXT
             );
-            """
-        )
-    )
-    cur.execute(
-        dedent(
-            """
+            """))
+    cur.execute(dedent("""
             CREATE TABLE server_wg_config (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 wg_name      TEXT,
@@ -220,12 +216,8 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                 private_key  TEXT,
                 public_key   TEXT
             );
-            """
-        )
-    )
-    cur.execute(
-        dedent(
-            """
+            """))
+    cur.execute(dedent("""
             CREATE TABLE peer_config (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name     TEXT,
@@ -237,35 +229,19 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                 preshared_key   TEXT,
                 forward_ports   TEXT
             );
-            """
-        )
-    )
-    cur.execute(
-        dedent(
-            """
+            """))
+    cur.execute(dedent("""
             CREATE TABLE install_status (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 state TEXT NOT NULL DEFAULT 'not_started'
-                CHECK (state IN (
-                    'not_started',
-                    'db_created',
-                    'sw_installed',
-                    'server_if_configured',
-                    'server_wg_configured'
-                ))
+                CHECK (state IN (%s))
             );
-            """
-        )
-    )
+            """) % ", ".join(f"'{name.lower()}'" for name in _STORED_INSTALL_STATUSES))
     # set initial state to 'not_started'
-    cur.execute(
-        dedent(
-            """
+    cur.execute(dedent("""
             INSERT OR REPLACE INTO install_status (id, state)
             VALUES (1, 'not_started');
-            """
-        )
-    )
+            """))
 
 
 @contextmanager
@@ -287,9 +263,9 @@ def conf_db_connected(db_path: Path) -> Generator[sqlite3.Connection, None, None
     try:
         yield conn
         conn.commit()
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        raise e
+        raise
     finally:
         conn.close()
 
@@ -303,13 +279,9 @@ def read_install_status(db_conn: sqlite3.Connection) -> InstallStatus:
         InstallStatus: The current installation status.
     """
     cur: sqlite3.Cursor = db_conn.cursor()
-    cur.execute(
-        dedent(
-            """
+    cur.execute(dedent("""
             SELECT state FROM install_status WHERE id = 1;
-            """
-        )
-    )
+            """))
     row: sqlite3.Row = cur.fetchone()
     if row and row["state"].upper() in InstallStatus.__members__:
         return InstallStatus[row["state"].upper()]
@@ -328,12 +300,10 @@ def update_install_status(
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
-        dedent(
-            """
+        dedent("""
             REPLACE INTO install_status (id, state)
             VALUES (1, ?);
-            """
-        ),
+            """),
         (new_state.name.lower(),),
     )
 
@@ -367,13 +337,11 @@ def update_os_info(db_conn: sqlite3.Connection, os_info: OSInfo) -> None:
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
-        dedent(
-            """
+        dedent("""
             REPLACE INTO os_info
             (id, os_name, os_version, userspace_wg)
             VALUES (1, ?, ?, ?);
-            """
-        ),
+            """),
         (
             os_info.os_name,
             os_info.os_version,
@@ -413,13 +381,11 @@ def update_server_config(
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
-        dedent(
-            """
+        dedent("""
             REPLACE INTO server_nic_config
             (id, nic_name, nic_ipv4, nic_ipv6)
             VALUES (1, ?, ?, ?);
-            """
-        ),
+            """),
         (
             server_config.nic_name,
             str(server_config.nic_ipv4),
@@ -463,8 +429,7 @@ def update_wg_config(db_conn: sqlite3.Connection, wg_config: ServerWGConfig) -> 
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
-        dedent(
-            """
+        dedent("""
             REPLACE INTO server_wg_config (
                 id,
                 wg_name,
@@ -475,8 +440,7 @@ def update_wg_config(db_conn: sqlite3.Connection, wg_config: ServerWGConfig) -> 
                 public_key
             )
             VALUES (1, ?, ?, ?, ?, ?, ?);
-            """
-        ),
+            """),
         (
             wg_config.wg_name,
             str(wg_config.ipv4),
@@ -516,7 +480,7 @@ def read_all_peer_configs(db_conn: sqlite3.Connection) -> list[PeerConfig]:
     return peer_configs
 
 
-def is_peer_exist(db_conn: sqlite3.Connection, peer_name: str) -> bool:
+def _is_peer_exist(db_conn: sqlite3.Connection, peer_name: str) -> bool:
     """
     Check if a peer configuration exists in the database by peer name.
     Args:
@@ -527,11 +491,9 @@ def is_peer_exist(db_conn: sqlite3.Connection, peer_name: str) -> bool:
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
-        dedent(
-            """
+        dedent("""
             SELECT 1 FROM peer_config WHERE name = ?;
-            """
-        ),
+            """),
         (peer_name,),
     )
     row: sqlite3.Row | None = cur.fetchone()
@@ -547,12 +509,11 @@ def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> Non
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     # Make sure peer with same name does not already exist
-    if is_peer_exist(db_conn, peer_config.name):
+    if _is_peer_exist(db_conn, peer_config.name):
         raise ValueError(f"Peer with name '{peer_config.name}' already exists.")
 
     cur.execute(
-        dedent(
-            """
+        dedent("""
             INSERT INTO peer_config (
                 name,
                 ipv4,
@@ -564,8 +525,7 @@ def add_peer_config(db_conn: sqlite3.Connection, peer_config: PeerConfig) -> Non
                 forward_ports
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-            """
-        ),
+            """),
         (
             peer_config.name,
             str(peer_config.ipv4),
@@ -588,10 +548,8 @@ def delete_peer_config(db_conn: sqlite3.Connection, peer_name: str) -> None:
     """
     cur: sqlite3.Cursor = db_conn.cursor()
     cur.execute(
-        dedent(
-            """
+        dedent("""
             DELETE FROM peer_config WHERE name = ?;
-            """
-        ),
+            """),
         (peer_name,),
     )
