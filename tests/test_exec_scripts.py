@@ -58,10 +58,32 @@ def test_create_wg_config(tmp_path: Path) -> None:
     content = path.read_text()
     assert "[Interface]" in content
     assert "ListenPort = 51820" in content
+    assert "MTU = 1420" in content
     assert "Address = 10.66.66.1/24, fd42:42:42::1/120" in content
     assert "[Peer] # peer1" in content
     assert "AllowedIPs = 10.66.66.2/32, fd42:42:42::2/128" in content
     assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_create_wg_config_custom_mtu(tmp_path: Path) -> None:
+    path = tmp_path / "wg0.conf"
+    create_wg_config(
+        path,
+        ServerWGConfig(
+            wg_name="wg0",
+            ipv4=IPv4Interface("10.66.66.1/24"),
+            ipv6=None,
+            listen_port=51820,
+            private_key="private_key",
+            public_key="public_key",
+            mtu=1280,
+        ),
+        [make_peer()],
+        tmp_path / "s.sh",
+        tmp_path / "e.sh",
+    )
+    content = path.read_text()
+    assert "MTU = 1280" in content
 
 
 def test_create_wg_config_no_ipv6(tmp_path: Path) -> None:

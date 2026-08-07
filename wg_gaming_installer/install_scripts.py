@@ -20,6 +20,7 @@ from wg_gaming_installer.exec_scripts import (
 from wg_gaming_installer.prompt_scripts import (
     add_peer_prompt,
     print_peer_summary,
+    reconfigure_wg_prompt,
     rm_peer_prompt,
     select_peer_config_prompt,
     server_if_prompt,
@@ -51,6 +52,8 @@ from wg_gaming_installer.sqlite_scripts import (
     conf_db_connected,
     create_config_db,
     delete_peer_config,
+    ensure_wg_mtu_column,
+    purge_server_config,
     read_all_peer_configs,
     read_install_status,
     read_os_info,
@@ -131,6 +134,7 @@ def _create_wg_peer_str(
     else:
         peer_wg_conf_str += f"Address = {peer.ipv4.ip!s}/32\n"
     peer_wg_conf_str += f"DNS = {', '.join(str(dns) for dns in peer.dns)}\n"
+    peer_wg_conf_str += f"MTU = {wg_config.mtu}\n"
     peer_wg_conf_str += f"PrivateKey = {peer.private_key}\n"
     peer_wg_conf_str += "\n"
     peer_wg_conf_str += "[Peer]\n"
@@ -274,6 +278,39 @@ def _restart_wg_if_active() -> None:
         print("Restarting WireGuard service...")
         _server_stop_wg_service_step()
         _server_start_wg_service_step()
+
+
+def _server_reconfigure_step() -> None:
+    """
+    Purge all server settings and peers, then re-run server configuration.
+    """
+    print("Re-configuring WireGuard server...")
+
+    confirm: bool = reconfigure_wg_prompt()
+    if not confirm:
+        print("Re-configuration cancelled.")
+        return
+
+    # Stop the service first so the running config and generated files
+    # do not conflict with the new configuration.
+    if _server_get_wg_status_step() == ServiceStatus.ACTIVE:
+        print("Stopping WireGuard service...")
+        _server_stop_wg_service_step()
+
+    # Purge settings and reset install status so the server configuration
+    # steps (server NIC, then server WG) run again.
+    with conf_db_connected(db_path=_PATHS.server_conf_db_path) as conn:
+        purge_server_config(db_conn=conn)
+        update_install_status(db_conn=conn, new_state=InstallStatus.SW_INSTALLED)
+
+    # Re-run configuration from the server step
+    for step in _continue_install(state=InstallStatus.SW_INSTALLED):
+        step()
+
+    print("Server re-configured successfully.")
+
+    # Show the main menu again so the user can re-add peers, etc.
+    _main_menu()
 
 
 def _server_add_wg_peer_step() -> None:
@@ -540,12 +577,13 @@ def _main_menu() -> None:
     print(" 6. Add a new peer.")
     print(" 7. Remove a peer.")
     print(" 8. Edit peer.")
-    print(" 9. Exit.")
+    print(" 9. Re-configure server.")
+    print("10. Exit.")
 
     user_input: str
     while True:
-        user_input = prompt("Please select an option from the menu [1-9] => ").strip()
-        if user_input not in map(str, range(1, 10)):
+        user_input = prompt("Please select an option from the menu [1-10] => ").strip()
+        if user_input not in map(str, range(1, 11)):
             print("Invalid option, please try again.")
             continue
         break
@@ -610,7 +648,8 @@ def _main_menu() -> None:
         "6": _server_add_wg_peer_step,
         "7": remove_peer_handler,
         "8": edit_peer_handler,
-        "9": exit_handler,
+        "9": _server_reconfigure_step,
+        "10": exit_handler,
     }
 
     menu_actions[user_input]()
@@ -624,6 +663,10 @@ def main() -> None:
     print("Checking if configuration database exists...")
     if not _PATHS.server_conf_db_path.exists():
         _db_setup_step()
+
+    # Migrate pre-existing databases (e.g. add the mtu column)
+    with conf_db_connected(db_path=_PATHS.server_conf_db_path) as conn:
+        ensure_wg_mtu_column(db_conn=conn)
 
     # Continue installation from the beginning
     print("Reading installation status from database...")

@@ -245,6 +245,28 @@ def _wg_if_listen_port_prompt(check_ipv6: bool) -> int | None:
     return wg_listen_port
 
 
+def _wg_if_mtu_prompt() -> int | None:
+    """
+    Prompt the user for the WireGuard MTU.
+
+    Returns:
+        int | None: The validated MTU value or None if invalid.
+    """
+    default_wg_mtu: int = 1420
+    wg_mtu_str: str = prompt(
+        "Input the WireGuard MTU: ", default=str(default_wg_mtu)
+    ).strip()
+    try:
+        wg_mtu: int = int(wg_mtu_str)
+    except ValueError:
+        print("Invalid MTU.", file=sys.stderr)
+        return None
+    if wg_mtu < 576 or wg_mtu > 65535:
+        print("MTU must be between 576 and 65535.", file=sys.stderr)
+        return None
+    return wg_mtu
+
+
 def server_wg_prompt(has_ipv6: bool) -> ServerWGConfig:
     while True:
         # First get WireGuard NIC name
@@ -274,6 +296,9 @@ def server_wg_prompt(has_ipv6: bool) -> ServerWGConfig:
             "Invalid listen port, please try again.",
         )
 
+        # WireGuard MTU
+        wg_mtu: int = _prompt_until(_wg_if_mtu_prompt, "Invalid MTU, please try again.")
+
         # Review inputs
         print()
         print("Please review the WireGuard configuration:")
@@ -281,7 +306,8 @@ def server_wg_prompt(has_ipv6: bool) -> ServerWGConfig:
         print(f"   ├─ IPv4 Interface: {wg_ipv4!s}")
         if wg_ipv6:
             print(f"   ├─ IPv6 Interface: {wg_ipv6!s}")
-        print(f"   └─ Listen Port: {wg_listen_port}")
+        print(f"   ├─ Listen Port: {wg_listen_port}")
+        print(f"   └─ MTU: {wg_mtu}")
         confirm: str = prompt("Is this information correct? (yes/no): ").strip().lower()
         if confirm in ['yes', 'y']:
             try:
@@ -296,6 +322,7 @@ def server_wg_prompt(has_ipv6: bool) -> ServerWGConfig:
                 listen_port=wg_listen_port,
                 private_key=wg_private_key,
                 public_key=wg_public_key,
+                mtu=wg_mtu,
             )
         else:
             print("Let's try again.\n")
@@ -909,6 +936,32 @@ def uninstall_wg_prompt() -> bool:
             .lower()
         )
         # accept both full and short answers, consistent with other prompts
+        if confirm in ['yes', 'y', 'no', 'n']:
+            break
+        print("Invalid input, please enter 'yes'/'y' or 'no'/'n'.")
+    return confirm not in ['no', 'n']
+
+
+def reconfigure_wg_prompt() -> bool:
+    """
+    Prompt the user to confirm re-configuring the WireGuard server.
+
+    Re-configuring purges the server NIC/WG settings and all peer
+    configurations, so this is a destructive action.
+
+    Returns:
+        bool: True if re-configuration is confirmed, False otherwise.
+    """
+    while True:
+        confirm = (
+            prompt(
+                "Are you sure you want to re-configure the WireGuard server?"
+                "This will delete the server settings and all peers, "
+                "and cannot be undone. (yes/no) => "
+            )
+            .strip()
+            .lower()
+        )
         if confirm in ['yes', 'y', 'no', 'n']:
             break
         print("Invalid input, please enter 'yes'/'y' or 'no'/'n'.")

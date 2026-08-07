@@ -18,7 +18,9 @@ from wg_gaming_installer.sqlite_scripts import (
     conf_db_connected,
     create_config_db,
     delete_peer_config,
+    ensure_wg_mtu_column,
     parse_forward_ports,
+    purge_server_config,
     read_all_peer_configs,
     read_install_status,
     read_os_info,
@@ -137,11 +139,67 @@ def test_wg_config_round_trip(db_path: Path) -> None:
         listen_port=51820,
         private_key="private",
         public_key="public",
+        mtu=1280,
     )
     with conf_db_connected(db_path) as conn:
         update_wg_config(conn, cfg)
     with conf_db_connected(db_path) as conn:
         assert read_wg_config(conn) == cfg
+
+
+def test_wg_config_mtu_default(db_path: Path) -> None:
+    cfg = ServerWGConfig(
+        wg_name="wg0",
+        ipv4=IPv4Interface("10.66.66.1/24"),
+        ipv6=None,
+        listen_port=51820,
+        private_key="private",
+        public_key="public",
+    )
+    with conf_db_connected(db_path) as conn:
+        update_wg_config(conn, cfg)
+    with conf_db_connected(db_path) as conn:
+        stored = read_wg_config(conn)
+        assert stored is not None
+        assert stored.mtu == 1420
+
+
+def test_ensure_wg_mtu_column_migrates(db_path: Path) -> None:
+    with conf_db_connected(db_path) as conn:
+        conn.execute("DROP TABLE server_wg_config;")
+        conn.execute("""
+            CREATE TABLE server_wg_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                wg_name      TEXT,
+                ipv4         TEXT,
+                ipv6         TEXT,
+                listen_port  INTEGER CHECK (listen_port BETWEEN 1 AND 65535),
+                private_key  TEXT,
+                public_key   TEXT
+            );
+            """)
+        conn.execute("""
+            INSERT INTO server_wg_config (
+                id, wg_name, ipv4, listen_port, private_key, public_key
+            ) VALUES (1, 'wg0', '10.66.66.1/24', 51820, 'priv', 'pub');
+            """)
+    with conf_db_connected(db_path) as conn:
+        ensure_wg_mtu_column(conn)
+        columns = [
+            row[1] for row in conn.execute("PRAGMA table_info(server_wg_config);")
+        ]
+        assert "mtu" in columns
+        cfg = read_wg_config(conn)
+        assert cfg is not None and cfg.mtu == 1420
+
+
+def test_ensure_wg_mtu_column_noop(db_path: Path) -> None:
+    with conf_db_connected(db_path) as conn:
+        ensure_wg_mtu_column(conn)
+        columns = [
+            row[1] for row in conn.execute("PRAGMA table_info(server_wg_config);")
+        ]
+        assert "mtu" in columns
 
 
 def test_peer_crud(db_path: Path) -> None:
@@ -164,3 +222,31 @@ def test_add_peer_duplicate_name_raises(db_path: Path) -> None:
         add_peer_config(conn, peer)
         with pytest.raises(ValueError):
             add_peer_config(conn, make_peer(name=peer.name, ipv4="10.66.66.3/24"))
+
+
+def test_purge_server_config(db_path: Path) -> None:
+    wg_cfg = ServerWGConfig(
+        wg_name="wg0",
+        ipv4=IPv4Interface("10.66.66.1/24"),
+        ipv6=None,
+        listen_port=51820,
+        private_key="private",
+        public_key="public",
+    )
+    nic_cfg = ServerIFConfig(
+        nic_name="eth0",
+        nic_ipv4=IPv4Address("192.168.1.10"),
+        nic_ipv6=None,
+    )
+    with conf_db_connected(db_path) as conn:
+        update_wg_config(conn, wg_cfg)
+        update_server_config(conn, nic_cfg)
+        add_peer_config(conn, make_peer())
+
+    with conf_db_connected(db_path) as conn:
+        purge_server_config(conn)
+
+    with conf_db_connected(db_path) as conn:
+        assert read_wg_config(conn) is None
+        assert read_server_nic_config(conn) is None
+        assert read_all_peer_configs(conn) == []

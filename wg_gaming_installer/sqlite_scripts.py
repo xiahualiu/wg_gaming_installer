@@ -36,6 +36,7 @@ class ServerWGConfig:
     listen_port: int
     private_key: str
     public_key: str
+    mtu: int = 1420
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +164,8 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
         ipv6        TEXT,
         listen_port INTEGER CHECK (listen_port BETWEEN 1 AND 65535),
         private_key TEXT,
-        public_key  TEXT
+        public_key  TEXT,
+        mtu         INTEGER
 
     Table : peer_config
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,7 +216,8 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
                 ipv6         TEXT,
                 listen_port  INTEGER CHECK (listen_port BETWEEN 1 AND 65535),
                 private_key  TEXT,
-                public_key   TEXT
+                public_key   TEXT,
+                mtu          INTEGER
             );
             """))
     cur.execute(dedent("""
@@ -242,6 +245,18 @@ def create_config_db(db_conn: sqlite3.Connection) -> None:
             INSERT OR REPLACE INTO install_status (id, state)
             VALUES (1, 'not_started');
             """))
+
+
+def ensure_wg_mtu_column(db_conn: sqlite3.Connection) -> None:
+    """
+    Add the `mtu` column to `server_wg_config` for databases created before the
+    column existed. No-op when the column is already present.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute("PRAGMA table_info(server_wg_config);")
+    columns: list[str] = [row[1] for row in cur.fetchall()]
+    if "mtu" not in columns:
+        cur.execute("ALTER TABLE server_wg_config ADD COLUMN mtu INTEGER;")
 
 
 @contextmanager
@@ -416,6 +431,7 @@ def read_wg_config(db_conn: sqlite3.Connection) -> ServerWGConfig | None:
             listen_port=row["listen_port"],
             private_key=row["private_key"],
             public_key=row["public_key"],
+            mtu=row["mtu"] if row["mtu"] is not None else 1420,
         )
     return None
 
@@ -437,9 +453,10 @@ def update_wg_config(db_conn: sqlite3.Connection, wg_config: ServerWGConfig) -> 
                 ipv6,
                 listen_port,
                 private_key,
-                public_key
+                public_key,
+                mtu
             )
-            VALUES (1, ?, ?, ?, ?, ?, ?);
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?);
             """),
         (
             wg_config.wg_name,
@@ -448,6 +465,7 @@ def update_wg_config(db_conn: sqlite3.Connection, wg_config: ServerWGConfig) -> 
             wg_config.listen_port,
             wg_config.private_key,
             wg_config.public_key,
+            wg_config.mtu,
         ),
     )
 
@@ -553,3 +571,16 @@ def delete_peer_config(db_conn: sqlite3.Connection, peer_name: str) -> None:
             """),
         (peer_name,),
     )
+
+
+def purge_server_config(db_conn: sqlite3.Connection) -> None:
+    """
+    Delete all server settings and peer configurations from the database.
+
+    This is used by the re-configure flow to reset the server back to a state
+    where only the OS/software installation step has completed.
+    """
+    cur: sqlite3.Cursor = db_conn.cursor()
+    cur.execute("DELETE FROM server_nic_config;")
+    cur.execute("DELETE FROM server_wg_config;")
+    cur.execute("DELETE FROM peer_config;")

@@ -70,6 +70,7 @@ After installation, the interactive menu provides these actions:
 - Uninstall and remove generated files
 - List peers; show peer config + QR code
 - Add / Remove / Edit peers
+- Re-configure server (purges all settings and re-runs server configuration)
 
 ## Port forwarding
 
@@ -87,6 +88,8 @@ Recommended safe workflow:
 2. Edit `wg_gaming_installer/exec_scripts.py` to change what the installer generates (WireGuard config, start/stop scripts, nftables rules).
 3. Edit the `Paths` dataclass in `wg_gaming_installer/install_scripts.py` to customize file locations (config folder, scripts, TUN device, shell).
 4. Restart the service using the management menu.
+
+The WireGuard MTU is prompted during install (default `1420`) and written to both the server `wg0.conf` and generated peer configs.
 
 ## Troubleshooting
 

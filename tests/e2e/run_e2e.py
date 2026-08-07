@@ -5,15 +5,16 @@ End-to-end test for wg_gaming_installer.
 Drives the real `wg-gaming-installer` CLI inside a systemd-enabled Docker
 container (as root) via a PTY, then asserts on the resulting system state:
 
-  1. Full install flow:
-       - creates /etc/wireguard/server_conf.db with the expected rows
-       - generates wg0.conf, wg_start.sh, wg_stop.sh, wg.nft with correct modes
-       - brings up `wg-quick@wg0` (systemd service active)
-       - installs the nftables `ip wg_nat` table
-  2. Add-peer flow (menu option 6) with a forwarded port:
-       - persists the peer in the database
-       - rewrites wg0.conf with the peer
-       - adds the DNAT rule to wg.nft
+   1. Full install flow:
+        - creates /etc/wireguard/server_conf.db with the expected rows
+        - generates wg0.conf, wg_start.sh, wg_stop.sh, wg.nft with correct modes
+        - brings up `wg-quick@wg0` (systemd service active)
+        - installs the nftables `ip wg_nat` table with the expected chains/rules
+   2. Add-peer flow (menu option 6) with a forwarded port:
+        - persists the peer in the database
+        - rewrites wg0.conf with the peer
+        - registers the peer on the live `wg0` interface
+        - adds the DNAT rule to wg.nft and the live nftables ruleset
 
 Every interactive step has an explicit timeout so a stuck prompt fails fast
 instead of hanging the CI job. Exit code is non-zero on any failure.
@@ -59,6 +60,11 @@ def check(condition: bool, message: str) -> None:
 def run(cmd: list[str]) -> str:
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout
+
+
+def nft_wg_nat_rules() -> str:
+    """Return the live ruleset of the `ip wg_nat` nftables table."""
+    return run(["nft", "list", "table", "ip", "wg_nat"])
 
 
 def spawn_installer() -> pexpect.spawn:
@@ -131,8 +137,9 @@ def phase_full_install() -> None:
     feed(child, "Input the WireGuard interface name:", "")  # default: wg0
     feed(child, "Input the WireGuard IPv4 interface of the server:", "")  # default
     feed(child, "Input the WireGuard listen port:", "")  # default: 51820
+    feed(child, "Input the WireGuard MTU:", "")  # default: 1420
     feed(child, "Is this information correct?", "yes")
-    feed(child, "Please select an option from the menu", "9")  # exit
+    feed(child, "Please select an option from the menu", "10")  # exit
 
     wait_exit(child, "full install")
     print(f"  [phase] Phase 1 total: {time.monotonic() - start:.1f}s")
@@ -200,6 +207,7 @@ def verify_install_state() -> None:
 
     wg_conf = WG_CONF_PATH.read_text()
     check("[Interface]" in wg_conf, "wg0.conf contains [Interface]")
+    check("MTU = 1420" in wg_conf, "wg0.conf contains MTU = 1420")
 
     active = run(["systemctl", "is-active", "wg-quick@wg0"]).strip()
     check(active == "active", f"wg-quick@wg0 is active (got {active!r})")
@@ -210,22 +218,46 @@ def verify_install_state() -> None:
     tables = run(["nft", "list", "tables"])
     check("table ip wg_nat" in tables, "nft ruleset contains ip wg_nat")
 
+    nft_nat = nft_wg_nat_rules()
+    check("chain postrouting" in nft_nat, "nft wg_nat has postrouting chain")
+    check("masquerade" in nft_nat, "nft wg_nat has masquerade (SNAT) rule")
+    check('"wg0"' in nft_nat, 'nft wg_nat SNAT rule matches iifname "wg0"')
+    check("chain prerouting" in nft_nat, "nft wg_nat has prerouting chain")
+
 
 def verify_peer_state() -> None:
     print("\n=== Verify peer state ===")
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
-            "SELECT name, forward_ports FROM peer_config WHERE name = 'laptop'"
+            "SELECT name, forward_ports, public_key FROM peer_config "
+            "WHERE name = 'laptop'"
         ).fetchone()
         check(row is not None, "peer 'laptop' persisted in database")
         if row:
             check(row[1] == "25565", f"peer forward_ports == '25565' (got {row[1]!r})")
+            peer_public_key = row[2]
 
     wg_conf = WG_CONF_PATH.read_text()
     check("[Peer] # laptop" in wg_conf, "wg0.conf contains [Peer] # laptop")
 
+    wg_show = run(["wg", "show", "wg0"])
+    if row:
+        check(
+            peer_public_key in wg_show,
+            "live wg0 interface has the new peer's public key",
+        )
+
     nft_conf = NFT_CONF.read_text()
     check("dnat to 10.66.66.2;" in nft_conf, "wg.nft contains dnat to 10.66.66.2")
+
+    nft_nat = nft_wg_nat_rules()
+    check(
+        "dnat to 10.66.66.2" in nft_nat,
+        "live nft ruleset DNATs to the new peer (10.66.66.2)",
+    )
+    check("25565" in nft_nat, "live nft ruleset forwards port 25565")
+    check("tcp dport" in nft_nat, "live nft ruleset has TCP DNAT rule")
+    check("udp dport" in nft_nat, "live nft ruleset has UDP DNAT rule")
 
 
 def main() -> int:

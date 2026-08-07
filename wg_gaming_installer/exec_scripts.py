@@ -34,6 +34,7 @@ def create_wg_config(
         else:
             f.write(f"Address = {wg_config.ipv4!s}\n")
         f.write(f"ListenPort = {wg_config.listen_port}\n")
+        f.write(f"MTU = {wg_config.mtu}\n")
         f.write(f"PrivateKey = {wg_config.private_key}\n\n")
         # Quote paths to be safe if they contain spaces/special chars
         f.write(f'PostUp = "{start_script_path!s}"\n')
