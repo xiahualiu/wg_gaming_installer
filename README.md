@@ -48,8 +48,8 @@ Officially supported minimums:
 
 | Distribution | Minimum | Notes |
 |---|---:|---|
-| `ubuntu` | 20.10 | 22.04 recommended |
-| `debian` | 11 | Bullseye |
+| `ubuntu` | 22.04 | 26.04 recommended |
+| `debian` | 12 | Bullseye |
 
 Also commonly compatible: `centos`/`rocky`/`almalinux` (9), `fedora` (32), `arch` (rolling).
 

@@ -68,20 +68,48 @@ jobs:
         run: pytest -v
 
   e2e:
-    name: E2E (ubuntu-${{ matrix.ubuntu }})
+    name: E2E (${{ matrix.distro }}-${{ matrix.version }}${{ matrix.userspace && ' userspace' || '' }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        ubuntu: ["22.04", "24.04", "26.04"]
+        include:
+          - distro: ubuntu
+            version: "22.04"
+            image: ubuntu:22.04
+            userspace: false
+          - distro: ubuntu
+            version: "24.04"
+            image: ubuntu:24.04
+            userspace: false
+          - distro: ubuntu
+            version: "26.04"
+            image: ubuntu:26.04
+            userspace: false
+          - distro: ubuntu
+            version: "24.04"
+            image: ubuntu:24.04
+            userspace: true
+          - distro: debian
+            version: "12"
+            image: debian:12
+            userspace: false
+          - distro: debian
+            version: "13"
+            image: debian:13
+            userspace: false
+          - distro: debian
+            version: "12"
+            image: debian:12
+            userspace: true
     steps:
       - uses: actions/checkout@v4
 
       - name: Build e2e image
         run: |
           docker build \
-            --build-arg UBUNTU_VERSION=${{ matrix.ubuntu }} \
+            --build-arg BASE_IMAGE=${{ matrix.image }} \
             -t wg-e2e \
             -f tests/e2e/Dockerfile \
             .
@@ -98,6 +126,7 @@ jobs:
             --tmpfs /run \
             --tmpfs /run/lock \
             --tmpfs /tmp \
+            ${{ matrix.userspace && '-e container=lxc' || '' }} \
             wg-e2e
 
       - name: Wait for systemd

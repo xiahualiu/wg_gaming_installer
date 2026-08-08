@@ -31,6 +31,24 @@ from pathlib import Path
 
 import pexpect
 
+
+# Detect whether the installer will take the wireguard-go (userspace) branch,
+# mirroring the installer's own `need_userspace_wireguard` logic. An explicit
+# WG_E2E_USERSPACE=1/0 override is also honored. Runs before the other constants
+# because USERSPACE influences the prompt flow below.
+def _detect_userspace() -> bool:
+    try:
+        virt = subprocess.run(
+            ["systemd-detect-virt"], check=False, capture_output=True, text=True
+        ).stdout.strip()
+    except OSError:
+        return False
+    return virt in ("openvz", "lxc", "lxd")
+
+
+_ENV_OVERRIDE = os.environ.get("WG_E2E_USERSPACE")
+USERSPACE = _ENV_OVERRIDE == "1" if _ENV_OVERRIDE is not None else _detect_userspace()
+
 INSTALLER = "/venv/bin/wg-gaming-installer"
 WG_CONF_DIR = Path("/etc/wireguard")
 DB_PATH = WG_CONF_DIR / "server_conf.db"
@@ -41,8 +59,11 @@ NFT_CONF = WG_CONF_DIR / "wg.nft"
 
 # Seconds to wait for a single prompt. Phase 1's first prompt also covers the
 # `apt-get install` of WireGuard dependencies, so it gets a larger budget.
+# The userspace branch additionally downloads the Go toolchain and builds
+# wireguard-go, so it gets an even larger budget.
 PROMPT_TIMEOUT = 120
 FIRST_PROMPT_TIMEOUT = 600
+WG_GO_TIMEOUT = 1200
 EOF_TIMEOUT = 60
 
 FAILURES: list[str] = []
@@ -124,13 +145,33 @@ def phase_full_install() -> None:
     child = spawn_installer()
     child.logfile_read = sys.stdout
 
-    # First prompt waits for apt-get to finish installing WireGuard deps.
-    feed(
-        child,
-        "Input the public interface name:",
-        "",  # accept default
-        timeout=FIRST_PROMPT_TIMEOUT,
-    )
+    if USERSPACE:
+        # Userspace branch: confirm WireGuard-Go install, then confirm the Go
+        # toolchain download, then wait for the network config prompts.
+        # The Go download + wireguard-go build happen between the "Press Enter"
+        # confirmations and the "public interface name" prompt, so that prompt
+        # gets the larger WG_GO_TIMEOUT budget.
+        feed(
+            child,
+            "continue with WireGuard-Go installation",
+            "",
+            timeout=FIRST_PROMPT_TIMEOUT,
+        )
+        feed(child, "Press Enter to continue", "")
+        feed(
+            child,
+            "Input the public interface name:",
+            "",
+            timeout=WG_GO_TIMEOUT,
+        )
+    else:
+        # First prompt waits for apt-get to finish installing WireGuard deps.
+        feed(
+            child,
+            "Input the public interface name:",
+            "",
+            timeout=FIRST_PROMPT_TIMEOUT,
+        )
     feed(child, "Input the public IPv4 address of the server:", "")  # default
     feed(child, "Does the server have a public IPv6 address?", "")  # default: no
     feed(child, "Is this information correct?", "yes")
@@ -183,6 +224,18 @@ def verify_install_state() -> None:
             "SELECT state FROM install_status WHERE id = 1"
         ).fetchone()
         check(status and status[0] == "server_wg_configured", "install_status is set")
+
+        os_row = conn.execute(
+            "SELECT userspace_wg FROM os_info WHERE id = 1"
+        ).fetchone()
+        expected_userspace = 1 if USERSPACE else 0
+        if os_row is not None:
+            check(
+                os_row[0] == expected_userspace,
+                f"os_info.userspace_wg == {expected_userspace} " f"(got {os_row[0]!r})",
+            )
+        else:
+            check(False, "os_info row exists")
 
         wg = conn.execute(
             "SELECT wg_name, listen_port FROM server_wg_config WHERE id = 1"
@@ -260,6 +313,23 @@ def verify_peer_state() -> None:
     check("udp dport" in nft_nat, "live nft ruleset has UDP DNAT rule")
 
 
+def verify_userspace_state() -> None:
+    print("\n=== Verify userspace (wireguard-go) state ===")
+    check(
+        Path("/usr/local/bin/wireguard-go").exists(),
+        "wireguard-go binary installed at /usr/local/bin/wireguard-go",
+    )
+    check(
+        Path("/usr/local/bin/go").exists(),
+        "Go toolchain symlink exists at /usr/local/bin/go",
+    )
+    go_version = run(["go", "version"]).strip()
+    check(
+        go_version.startswith("go version go1."),
+        f"go version reports Go 1.x (got {go_version!r})",
+    )
+
+
 def main() -> int:
     if os.geteuid() != 0:
         print("E2E test must be run as root.", file=sys.stderr)
@@ -268,6 +338,8 @@ def main() -> int:
     total_start = time.monotonic()
     phase_full_install()
     verify_install_state()
+    if USERSPACE:
+        verify_userspace_state()
     phase_add_peer()
     verify_peer_state()
     print(f"\n=== Total e2e time: {time.monotonic() - total_start:.1f}s ===")
